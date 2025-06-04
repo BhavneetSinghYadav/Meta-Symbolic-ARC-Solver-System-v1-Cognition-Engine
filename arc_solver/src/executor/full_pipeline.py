@@ -10,7 +10,14 @@ from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.executor.simulator import simulate_symbolic_program
 from arc_solver.src.rank_rule_sets import probabilistic_rank_rule_sets
-from arc_solver.src.combine_predictions import combine_predictions
+from arc_solver.src.memory.memory_store import (
+    load_memory,
+    retrieve_similar_signatures,
+    save_rule_program,
+)
+from arc_solver.src.utils.signature_extractor import extract_task_signature
+from arc_solver.src.fallback import prioritize, soft_vote
+from arc_solver.src.executor.prior_templates import load_prior_templates
 from arc_solver.src.introspection import (
     build_trace,
     inject_feedback,
@@ -19,7 +26,14 @@ from arc_solver.src.introspection import (
 )
 
 
-def solve_task(task: dict, *, introspect: bool = False):
+def solve_task(
+    task: dict,
+    *,
+    introspect: bool = False,
+    use_memory: bool = False,
+    use_prior: bool = False,
+    task_id: str | None = None,
+):
     """Solve a single ARC task represented by a JSON dictionary."""
     train_pairs = [
         (Grid(p["input"]), Grid(p["output"])) for p in task.get("train", [])
@@ -36,6 +50,31 @@ def solve_task(task: dict, *, introspect: bool = False):
     ranked_rules = probabilistic_rank_rule_sets(rule_sets, train_pairs)
     best_rules: List = ranked_rules[0][0] if ranked_rules else []
 
+    # Recall programs from memory or priors ---------------------------------
+    signature = extract_task_signature(task)
+    candidate_sets = [rs for rs, _ in ranked_rules]
+    if use_memory:
+        recalled = retrieve_similar_signatures(signature)
+        for entry in recalled:
+            candidate_sets.append(entry["rules"])
+    if use_prior:
+        candidate_sets.extend(load_prior_templates())
+
+    # Score all candidates on training examples
+    def _train_score(rules: List) -> float:
+        if not train_pairs:
+            return 0.0
+        total = 0.0
+        for inp, out in train_pairs:
+            pred = simulate_rules(inp, rules)
+            total += pred.compare_to(out)
+        return total / len(train_pairs)
+
+    scores = [_train_score(rs) for rs in candidate_sets]
+    prioritized = prioritize(candidate_sets, scores)
+    if prioritized:
+        best_rules = prioritized[0]
+
     # Optional introspection/refinement using first training example
     traces = []
     if introspect and best_rules and train_pairs:
@@ -49,13 +88,17 @@ def solve_task(task: dict, *, introspect: bool = False):
         traces.append(trace)
 
     predictions = []
+    top_sets = prioritized[:3] if prioritized else []
     for g in test_inputs:
-        ensemble = []
-        for rules, prob in ranked_rules:
-            pred = simulate_rules(g, rules)
-            ensemble.append((pred, prob))
-        final = combine_predictions(ensemble)
+        cand_preds = [simulate_rules(g, rs) for rs in top_sets] or [g]
+        final = soft_vote(cand_preds)
         predictions.append(final)
+
+    # Persist best performing program
+    if use_memory and train_pairs and best_rules:
+        score = _train_score(best_rules)
+        if task_id is not None:
+            save_rule_program(task_id, signature, best_rules, score)
 
     return predictions, test_outputs, traces, best_rules
 
