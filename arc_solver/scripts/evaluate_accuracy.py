@@ -34,11 +34,48 @@ def load_predictions(path: Path) -> dict[str, List[List[List[int]]]]:
 
 
 def load_solutions(path: Path) -> dict[str, List[List[List[int]]]]:
+    """Load ground truth solutions from ``path``.
+
+    The JSON file may either be a dictionary mapping task ids to objects
+    containing an ``"output"`` field or a list of such objects with explicit
+    ``"task_id"`` fields. In both cases a dictionary keyed by task id and whose
+    values are the raw ``output`` entries is returned.
+    """
+
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
-    sols = {}
-    for tid, obj in raw.items():
-        sols[tid] = obj["output"]
+
+    sols: dict[str, List[List[List[int]]]] = {}
+
+    if isinstance(raw, dict):
+        # Legacy dictionary format {tid: {"output": ...}}
+        for tid, obj in raw.items():
+            if not isinstance(obj, dict) or "output" not in obj:
+                raise ValueError(f"Missing 'output' for task {tid}")
+            data = obj["output"]
+            # normalize a single grid into a list of grids
+            if data and isinstance(data[0][0], int):
+                sols[tid] = [data]
+            else:
+                sols[tid] = data
+    elif isinstance(raw, list):
+        # New list format [{"task_id": tid, "output": ...}, ...]
+        for item in raw:
+            if not isinstance(item, dict):
+                raise ValueError("Solution list items must be dictionaries")
+            tid = item.get("task_id")
+            data = item.get("output")
+            if tid is None or data is None:
+                raise ValueError("Each solution entry requires 'task_id' and 'output'")
+            if tid in sols:
+                raise ValueError(f"Duplicate task id {tid} in solutions")
+            if data and isinstance(data[0][0], int):
+                sols[tid] = [data]
+            else:
+                sols[tid] = data
+    else:
+        raise ValueError("Unsupported JSON format for solutions")
+
     return sols
 
 
