@@ -94,7 +94,14 @@ def _plot_failure(task_id: str, idx: int, pred: Grid, true: Grid) -> None:
     plt.close(fig)
 
 
-def _predict(task: ARCAGITask, *, introspect: bool = False, threshold: float = 0.9):
+def _predict(
+    task: ARCAGITask,
+    *,
+    introspect: bool = False,
+    threshold: float = 0.9,
+    use_memory: bool = False,
+    use_prior: bool = False,
+):
     """Return predictions for ``task`` optionally refining with introspection."""
 
     train_dicts = [
@@ -103,7 +110,13 @@ def _predict(task: ARCAGITask, *, introspect: bool = False, threshold: float = 0
     test_dicts = [{"input": g.data} for g in task.test]
     json_task = {"train": train_dicts, "test": test_dicts}
 
-    preds, _, _, rules = pipeline_solve_task(json_task, introspect=False)
+    preds, _, _, rules = pipeline_solve_task(
+        json_task,
+        introspect=False,
+        use_memory=use_memory,
+        use_prior=use_prior,
+        task_id=task.task_id,
+    )
 
     def _normalize(pred_list: List) -> List[Grid]:
         out: List[Grid] = []
@@ -123,7 +136,13 @@ def _predict(task: ARCAGITask, *, introspect: bool = False, threshold: float = 0
             accuracy_score(simulate_rules(inp, rules), out) for inp, out in task.train
         ) / len(task.train)
         if score < threshold:
-            preds, _, _, _ = pipeline_solve_task(json_task, introspect=True)
+            preds, _, _, _ = pipeline_solve_task(
+                json_task,
+                introspect=True,
+                use_memory=use_memory,
+                use_prior=use_prior,
+                task_id=task.task_id,
+            )
             norm_preds = _normalize(preds)
 
     ref_shape, ref_counts = _expected_pattern(task)
@@ -179,6 +198,8 @@ def main() -> None:
         default="sample_submission.json",
         help="Path for the submission JSON output",
     )
+    parser.add_argument("--use_memory", action="store_true", help="Enable rule memory")
+    parser.add_argument("--use_prior", action="store_true", help="Use prior templates")
     args = parser.parse_args()
 
     split_prefix = {
@@ -200,7 +221,13 @@ def main() -> None:
 
     predictions: dict[tuple[str, int], Grid] = {}
     for task in tasks:
-        outputs = _predict(task, introspect=args.introspect, threshold=args.threshold)
+        outputs = _predict(
+            task,
+            introspect=args.introspect,
+            threshold=args.threshold,
+            use_memory=args.use_memory,
+            use_prior=args.use_prior,
+        )
         for i, grid in enumerate(outputs):
             predictions[(task.task_id, i)] = grid
 
