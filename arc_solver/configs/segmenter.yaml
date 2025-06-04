@@ -1,2 +1,2 @@
-# Configuration for segmentation module
+# Configuration for segment module
 threshold: 0.5
