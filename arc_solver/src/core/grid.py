@@ -66,6 +66,10 @@ class Grid:
         flipped = [list(reversed(row)) for row in self.data]
         return Grid(flipped)
 
+    def to_list(self) -> List[List[int]]:
+        """Return a deep list copy of the grid data."""
+        return [row[:] for row in self.data]
+
     def attach_overlay(self, overlay: List[List[Any]]) -> None:
         """Attach a symbolic overlay to the grid."""
         h, w = self.shape()

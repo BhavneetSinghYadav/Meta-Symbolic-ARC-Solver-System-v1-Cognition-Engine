@@ -13,7 +13,12 @@ def build_submission_json(tasks: List[ARCAGITask], predictions: Dict[tuple[str, 
 
     submission: Dict[str, Dict[str, List[List[int]] | List[List[List[int]]]]] = {}
     for task in tasks:
-        outputs = [predictions[(task.task_id, i)].to_list() for i in range(len(task.test))]
+        outputs: List[List[List[int]]] = []
+        for i in range(len(task.test)):
+            key = (task.task_id, i)
+            if key not in predictions:
+                raise KeyError(f"Missing prediction for {task.task_id} index {i}")
+            outputs.append(predictions[key].data)
         submission[task.task_id] = {
             "output": outputs if len(outputs) > 1 else outputs[0]
         }
