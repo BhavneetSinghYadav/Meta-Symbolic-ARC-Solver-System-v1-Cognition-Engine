@@ -90,6 +90,7 @@ class SymbolicRule:
     source: List[Symbol]
     target: List[Symbol]
     nature: TransformationNature | None = None
+    condition: Dict[str, str] = field(default_factory=dict)
 
     def __str__(self) -> str:
         left = ", ".join(str(s) for s in self.source)
@@ -102,7 +103,8 @@ class SymbolicRule:
             "SymbolicRule("
             f"transformation={self.transformation!r}, "
             f"source={self.source!r}, "
-            f"target={self.target!r}, nature={self.nature!r})"
+            f"target={self.target!r}, "
+            f"nature={self.nature!r}, condition={self.condition!r})"
         )
 
 

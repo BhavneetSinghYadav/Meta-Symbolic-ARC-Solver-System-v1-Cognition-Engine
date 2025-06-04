@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import Symbol, SymbolType, SymbolicRule
+from arc_solver.src.segment.segmenter import zone_overlay
 
 
 @dataclass
@@ -50,6 +51,11 @@ def build_trace(
         match_score = 1.0 if grid_true is None else 0.0
 
     context: Dict[str, Any] = {}
+    if rule.condition:
+        context["condition"] = dict(rule.condition)
+    if symbolic_overlay is None and rule.condition.get("zone"):
+        symbolic_overlay = zone_overlay(grid_in)
+
     if symbolic_overlay is not None and len(symbolic_overlay) == height:
         zones: set[str] = set()
         regions: set[str] = set()

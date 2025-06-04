@@ -90,6 +90,27 @@ def segment_connected_regions(grid: Grid) -> Dict[int, List[Tuple[int, int]]]:
 
 
 # ---------------------------------------------------------------------------
+# Overlay utilities
+# ---------------------------------------------------------------------------
+
+def zone_overlay(grid: Grid) -> List[List[Optional[Symbol]]]:
+    """Return zone label overlay matrix for ``grid``."""
+    zones = segment_fixed_zones(grid)
+    return assign_zone_labels(grid, zones)
+
+
+def label_connected_regions(grid: Grid) -> List[List[Optional[int]]]:
+    """Return integer region labels overlay for connected components."""
+    regions = segment_connected_regions(grid)
+    height, width = grid.shape()
+    overlay: List[List[Optional[int]]] = [[None for _ in range(width)] for _ in range(height)]
+    for reg_id, cells in regions.items():
+        for r, c in cells:
+            overlay[r][c] = reg_id
+    return overlay
+
+
+# ---------------------------------------------------------------------------
 # Zone overlay assignment
 # ---------------------------------------------------------------------------
 
@@ -110,4 +131,6 @@ __all__ = [
     "segment_fixed_zones",
     "segment_connected_regions",
     "assign_zone_labels",
+    "zone_overlay",
+    "label_connected_regions",
 ]

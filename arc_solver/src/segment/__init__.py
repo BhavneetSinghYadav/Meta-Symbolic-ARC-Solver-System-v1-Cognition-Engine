@@ -2,7 +2,13 @@
 
 from typing import Any, List
 
-from .segmenter import assign_zone_labels, segment_connected_regions, segment_fixed_zones
+from .segmenter import (
+    assign_zone_labels,
+    segment_connected_regions,
+    segment_fixed_zones,
+    zone_overlay,
+    label_connected_regions,
+)
 
 
 def segment(grid: Any) -> List:
@@ -13,5 +19,7 @@ __all__ = [
     "segment_fixed_zones",
     "segment_connected_regions",
     "assign_zone_labels",
+    "zone_overlay",
+    "label_connected_regions",
     "segment",
 ]
