@@ -8,7 +8,8 @@ from arc_solver.scripts.run_agi_solver import _predict
 
 
 def compute_accuracy(pred: Grid, gt: Grid) -> int:
-    return int(pred.equals(gt))
+    """Return 1 if ``pred`` exactly matches ``gt``."""
+    return int(pred.compare_to(gt) == 1.0)
 
 
 def main() -> None:

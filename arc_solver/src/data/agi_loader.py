@@ -32,7 +32,10 @@ class ARCAGITask:
         self.train = [(_to_grid(p["input"] if isinstance(p, dict) else p[0]),
                        _to_grid(p["output"] if isinstance(p, dict) else p[1]))
                       for p in train_pairs]
-        self.test = [_to_grid(t["input"] if isinstance(t, dict) else t) for t in test_inputs]
+        self.test = [
+            _to_grid(t["input"] if isinstance(t, dict) and "input" in t else t)
+            for t in test_inputs
+        ]
         self.ground_truth = [_to_grid(g) for g in ground_truth] if ground_truth else None
 
 

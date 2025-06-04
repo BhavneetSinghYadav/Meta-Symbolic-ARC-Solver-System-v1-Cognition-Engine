@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import json
 from arc_solver.scripts.run_agi_solver import main
 
 
@@ -22,4 +23,7 @@ def test_run_agi_solver_creates_submission(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", argv)
     main()
     assert out_file.exists()
+    data = json.loads(out_file.read_text())
+    assert "00000001" in data
+    assert data["00000001"]["output"] == [[1]]
 

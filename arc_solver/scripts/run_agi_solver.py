@@ -33,6 +33,16 @@ def _predict(task: ARCAGITask, *, introspect: bool = False, threshold: float = 0
     json_task = {"train": train_dicts, "test": test_dicts}
 
     preds, _, _, rules = pipeline_solve_task(json_task, introspect=False)
+    # Normalize predictions to ``Grid`` objects in case the pipeline returns
+    # dictionaries like {"output": grid} or raw list data
+    norm_preds: List[Grid] = []
+    for p in preds:
+        if isinstance(p, dict) and "output" in p:
+            p = p["output"]
+        if isinstance(p, Grid):
+            norm_preds.append(p)
+        else:
+            norm_preds.append(Grid(p))
 
     if introspect and task.train:
         score = sum(
@@ -41,7 +51,15 @@ def _predict(task: ARCAGITask, *, introspect: bool = False, threshold: float = 0
         ) / len(task.train)
         if score < threshold:
             preds, _, _, _ = pipeline_solve_task(json_task, introspect=True)
-    return preds
+            norm_preds = []
+            for p in preds:
+                if isinstance(p, dict) and "output" in p:
+                    p = p["output"]
+                if isinstance(p, Grid):
+                    norm_preds.append(p)
+                else:
+                    norm_preds.append(Grid(p))
+    return norm_preds
 
 
 def main() -> None:
