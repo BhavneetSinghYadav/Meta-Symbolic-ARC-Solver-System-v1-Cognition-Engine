@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from arc_solver.src.core.grid import Grid
 
@@ -20,9 +20,20 @@ class ARCAGITask:
         ground_truth: Optional[list] = None,
     ) -> None:
         self.task_id = task_id
-        self.train = [(Grid(p["input"]), Grid(p["output"])) for p in train_pairs]
-        self.test = [Grid(t) for t in test_inputs]
-        self.ground_truth = [Grid(g) for g in ground_truth] if ground_truth else None
+
+        def _to_grid(obj: Any) -> Grid:
+            data = obj
+            if isinstance(obj, dict):
+                data = obj.get("input", obj.get("output"))
+            if not isinstance(data, list):
+                raise ValueError(f"Malformed grid in task {task_id}")
+            return Grid(data)
+
+        self.train = [(_to_grid(p["input"] if isinstance(p, dict) else p[0]),
+                       _to_grid(p["output"] if isinstance(p, dict) else p[1]))
+                      for p in train_pairs]
+        self.test = [_to_grid(t["input"] if isinstance(t, dict) else t) for t in test_inputs]
+        self.ground_truth = [_to_grid(g) for g in ground_truth] if ground_truth else None
 
 
 def load_agi_tasks(challenges_path: Path | str, solutions_path: Optional[Path | str] = None) -> List[ARCAGITask]:

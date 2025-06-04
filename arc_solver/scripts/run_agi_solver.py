@@ -2,6 +2,13 @@ from __future__ import annotations
 
 """Run the symbolic solver on the official ARC AGI dataset."""
 
+import sys
+import pathlib
+
+repo_root = pathlib.Path(__file__).resolve().parents[2]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
 import argparse
 import json
 from pathlib import Path
@@ -52,14 +59,34 @@ def main() -> None:
         default=0.9,
         help="Confidence threshold for introspection",
     )
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        default=".",
+        help="Directory containing dataset JSON files",
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="sample_submission.json",
+        help="Path for the submission JSON output",
+    )
     args = parser.parse_args()
 
-    split_map = {
-        "train": "arc-agi_training-challenges.json",
-        "evaluation": "arc-agi_evaluation-challenges.json",
-        "test": "arc-agi_test-challenges.json",
-    }
-    challenges_path = Path(split_map[args.split])
+    split_prefix = {
+        "train": "arc-agi_training",
+        "evaluation": "arc-agi_evaluation",
+        "test": "arc-agi_test",
+    }[args.split]
+
+    hyphen = Path(args.data_dir) / f"{split_prefix}-challenges.json"
+    underscore = Path(args.data_dir) / f"{split_prefix}_challenges.json"
+    if hyphen.exists():
+        challenges_path = hyphen
+    elif underscore.exists():
+        challenges_path = underscore
+    else:
+        raise FileNotFoundError(f"Dataset file not found: {hyphen} or {underscore}")
 
     tasks = load_agi_tasks(challenges_path)
 
@@ -71,10 +98,10 @@ def main() -> None:
 
     submission = build_submission_json(tasks, predictions)
 
-    with open("sample_submission.json", "w", encoding="utf-8") as f:
+    with open(args.output, "w", encoding="utf-8") as f:
         json.dump(submission, f)
 
-    print("Submission written to sample_submission.json")
+    print(f"Submission written to {args.output}")
 
 
 if __name__ == "__main__":
