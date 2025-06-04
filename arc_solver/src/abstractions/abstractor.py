@@ -14,6 +14,7 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationType,
 )
 from arc_solver.src.segment.segmenter import zone_overlay
+from arc_solver.src.executor.simulator import simulate_rules
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +200,41 @@ def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[Symbo
     return [rule]
 
 
+def split_rule_by_overlay(
+    rule: SymbolicRule, grid: Grid, overlay: List[List[Symbol]]
+) -> List[SymbolicRule]:
+    """Return zone-scoped variants of ``rule`` when applicable."""
+    h, w = grid.shape()
+    predicted = simulate_rules(grid, [rule])
+    zone_changes: Dict[str | None, List[Tuple[int, int]]] = {}
+    for r in range(h):
+        for c in range(w):
+            if predicted.get(r, c) == grid.get(r, c):
+                continue
+            zone_sym = overlay[r][c]
+            zone = zone_sym.value if zone_sym is not None else None
+            zone_changes.setdefault(zone, []).append((r, c))
+
+    zones = [z for z in zone_changes.keys() if z is not None]
+    if not zones:
+        return [rule]
+
+    new_rules: List[SymbolicRule] = []
+    for zone in zones:
+        new_rules.append(
+            SymbolicRule(
+                transformation=rule.transformation,
+                source=rule.source,
+                target=rule.target,
+                nature=rule.nature,
+                condition={"zone": zone},
+            )
+        )
+    if None in zone_changes:
+        new_rules.append(rule)
+    return new_rules
+
+
 # ---------------------------------------------------------------------------
 # Convenience wrapper
 # ---------------------------------------------------------------------------
@@ -211,14 +247,28 @@ def abstract(objects) -> List[SymbolicRule]:
     input_grid, output_grid = objects[0], objects[1]
     overlay = zone_overlay(input_grid)
     rules: List[SymbolicRule] = []
-    rules.extend(extract_color_change_rules(input_grid, output_grid, zone_overlay=overlay))
+    rules.extend(
+        extract_color_change_rules(
+            input_grid, output_grid, zone_overlay=overlay
+        )
+    )
     rules.extend(extract_shape_based_rules(input_grid, output_grid))
-    return rules
+    split: List[SymbolicRule] = []
+    for r in rules:
+        if r.transformation.ttype in (
+            TransformationType.REPLACE,
+            TransformationType.TRANSLATE,
+        ):
+            split.extend(split_rule_by_overlay(r, input_grid, overlay))
+        else:
+            split.append(r)
+    return split
 
 
 __all__ = [
     "extract_color_change_rules",
     "extract_shape_based_rules",
     "extract_zonewise_rules",
+    "split_rule_by_overlay",
     "abstract",
 ]

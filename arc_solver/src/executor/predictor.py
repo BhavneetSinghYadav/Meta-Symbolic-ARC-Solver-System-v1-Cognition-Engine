@@ -6,7 +6,7 @@ from typing import List
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules, score_prediction
-from arc_solver.src.executor.conflict_resolver import resolve_conflicts
+from arc_solver.src.executor.conflict_resolver import detect_conflicts, resolve_conflicts
 from arc_solver.src.symbolic.vocabulary import SymbolicRule
 
 
@@ -19,7 +19,8 @@ def select_best_program(
     best_rules: List[SymbolicRule] = []
     best_score = -1.0
     for rules in rule_sets:
-        resolved = resolve_conflicts(rules, input_grid)
+        conflicts = detect_conflicts(rules, input_grid)
+        resolved = resolve_conflicts(conflicts, rules)
         predicted = simulate_rules(input_grid, resolved)
         score = score_prediction(predicted, output_grid)
         if score > best_score:

@@ -78,6 +78,9 @@ def build_trace(
             context["regions"] = sorted(regions)
         if cell_labels:
             context["labels"] = cell_labels
+        if zones:
+            hierarchy = {"rule_set": {z: {"rule": str(rule)}} for z in zones}
+            context["hierarchy"] = hierarchy
 
     return RuleTrace(
         rule=rule,
