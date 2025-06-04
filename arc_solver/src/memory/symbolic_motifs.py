@@ -1,0 +1,3 @@
+"""Predefined symbolic motifs."""
+
+MOTIFS = []
