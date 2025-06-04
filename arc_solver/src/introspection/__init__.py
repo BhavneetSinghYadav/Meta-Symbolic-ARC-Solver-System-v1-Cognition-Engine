@@ -2,6 +2,7 @@
 """Introspection utilities for tracing and explaining solver behaviour."""
 
 from .trace_builder import RuleTrace, build_trace
+from .symbolic_trace import SymbolicTrace
 from .introspective_validator import validate_trace
 from .narrator_llm import narrate_trace
 from .refinement import (
@@ -13,6 +14,7 @@ from .refinement import (
 
 __all__ = [
     "RuleTrace",
+    "SymbolicTrace",
     "build_trace",
     "validate_trace",
     "narrate_trace",
