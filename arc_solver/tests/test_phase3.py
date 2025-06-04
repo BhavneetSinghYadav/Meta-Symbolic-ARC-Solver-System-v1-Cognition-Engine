@@ -2,6 +2,7 @@ from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor import (
     simulate_rules,
     score_prediction,
+    detect_conflicts,
     resolve_conflicts,
     select_best_program,
 )
@@ -34,7 +35,7 @@ def test_simulate_replace_and_score():
     assert score_prediction(pred, target) == 1.0
 
 
-def test_conflict_resolver_prefers_simple():
+def test_conflict_resolver_prefers_specific():
     grid = Grid([[1, 1], [2, 2]])
     simple = _color_rule(1, 3)
     complex_rule = SymbolicRule(
@@ -42,8 +43,9 @@ def test_conflict_resolver_prefers_simple():
         source=[Symbol(SymbolType.ZONE, "Z"), Symbol(SymbolType.COLOR, "1")],
         target=[Symbol(SymbolType.COLOR, "2")],
     )
-    resolved = resolve_conflicts([complex_rule, simple], grid)
-    assert resolved[0] == simple
+    conflicts = detect_conflicts([complex_rule, simple], grid)
+    resolved = resolve_conflicts(conflicts)
+    assert complex_rule in resolved
 
 
 def test_select_best_program():

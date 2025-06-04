@@ -38,3 +38,16 @@ def test_narrate_trace_fallback():
     summary = narrate_trace(trace)
     assert "Rule" in summary
     assert "full coverage" in summary
+
+
+def test_trace_includes_hierarchy():
+    grid = Grid([[1]])
+    rule = SymbolicRule(
+        Transformation(TransformationType.REPLACE),
+        source=[Symbol(SymbolType.COLOR, "1")],
+        target=[Symbol(SymbolType.COLOR, "2")],
+        condition={"zone": "TopLeft"},
+    )
+    pred = Grid([[2]])
+    trace = build_trace(rule, grid, pred, pred)
+    assert "hierarchy" in trace.symbolic_context
