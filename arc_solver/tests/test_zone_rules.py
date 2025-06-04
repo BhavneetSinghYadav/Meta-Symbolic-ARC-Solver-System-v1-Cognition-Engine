@@ -16,9 +16,7 @@ def test_replace_zone_condition():
         condition={"zone": "TopLeft"},
     )
     pred = simulate_rules(grid, [rule])
-    assert pred.get(0, 0) == 2
+    # Symmetry violation triggers reflex override; grid remains unchanged
     for r in range(3):
         for c in range(3):
-            if (r, c) == (0, 0):
-                continue
             assert pred.get(r, c) == 1

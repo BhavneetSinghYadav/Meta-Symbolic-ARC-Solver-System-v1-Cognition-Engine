@@ -9,6 +9,9 @@ from arc_solver.src.abstractions.rule_generator import generalize_rules
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.executor.simulator import simulate_symbolic_program
+from arc_solver.src.executor.attention import AttentionMask, zone_to_mask
+from arc_solver.src.executor.dependency import select_independent_rules
+from arc_solver.src.segment.segmenter import zone_overlay
 from arc_solver.src.rank_rule_sets import probabilistic_rank_rule_sets
 from arc_solver.src.memory.memory_store import (
     load_memory,
@@ -45,6 +48,7 @@ def solve_task(
     for inp, out in train_pairs:
         rules = abstract([inp, out])
         rules = generalize_rules(rules)
+        rules = select_independent_rules(rules)
         rule_sets.append(rules)
 
     ranked_rules = probabilistic_rank_rule_sets(rule_sets, train_pairs)
@@ -52,25 +56,40 @@ def solve_task(
 
     # Recall programs from memory or priors ---------------------------------
     signature = extract_task_signature(task)
-    candidate_sets = [rs for rs, _ in ranked_rules]
+    candidate_sets = [select_independent_rules(rs) for rs, _ in ranked_rules]
     if use_memory:
         recalled = retrieve_similar_signatures(signature)
         for entry in recalled:
-            candidate_sets.append(entry["rules"])
+            candidate_sets.append(select_independent_rules(entry["rules"]))
     if use_prior:
-        candidate_sets.extend(load_prior_templates())
+        candidate_sets.extend(select_independent_rules(rs) for rs in load_prior_templates())
 
     # Score all candidates on training examples
-    def _train_score(rules: List) -> float:
+    def _train_score(rules: List, mask: List[List[bool]] | None = None) -> float:
         if not train_pairs:
             return 0.0
         total = 0.0
         for inp, out in train_pairs:
-            pred = simulate_rules(inp, rules)
+            pred = simulate_rules(inp, rules, attention_mask=mask)
             total += pred.compare_to(out)
         return total / len(train_pairs)
 
-    scores = [_train_score(rs) for rs in candidate_sets]
+    zones: List[str] = []
+    if train_pairs:
+        overlay = zone_overlay(train_pairs[0][0])
+        for row in overlay:
+            for sym in row:
+                if sym is not None:
+                    zones.append(sym.value)
+    zones = sorted(set(zones))
+    attn_masks = [zone_to_mask(train_pairs[0][0], z) for z in zones]
+
+    scores = []
+    for rs in candidate_sets:
+        base = _train_score(rs)
+        for m in attn_masks:
+            base = max(base, _train_score(rs, m))
+        scores.append(base)
     prioritized = prioritize(candidate_sets, scores)
     if prioritized:
         best_rules = prioritized[0]
@@ -90,7 +109,12 @@ def solve_task(
     predictions = []
     top_sets = prioritized[:3] if prioritized else []
     for g in test_inputs:
-        cand_preds = [simulate_rules(g, rs) for rs in top_sets] or [g]
+        cand_preds = []
+        for rs in top_sets:
+            cand_preds.append(simulate_rules(g, rs))
+            for m in attn_masks:
+                cand_preds.append(simulate_rules(g, rs, attention_mask=m))
+        cand_preds = cand_preds or [g]
         final = soft_vote(cand_preds)
         predictions.append(final)
 
