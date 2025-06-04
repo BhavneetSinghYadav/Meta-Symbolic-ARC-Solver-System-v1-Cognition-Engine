@@ -24,3 +24,10 @@ def test_load_agi_tasks_no_solutions(tmp_path: Path) -> None:
     tasks = load_agi_tasks(challenges)
     assert tasks[0].ground_truth is None
 
+
+def test_load_agi_tasks_wrapped_test(tmp_path: Path) -> None:
+    challenges = tmp_path / "ch.json"
+    challenges.write_text(Path(__file__).with_name("sample_agi-dict-test.json").read_text())
+    tasks = load_agi_tasks(challenges)
+    assert tasks[0].test[0].data == [[0]]
+
