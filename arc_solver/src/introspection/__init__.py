@@ -11,6 +11,16 @@ from .refinement import (
     llm_refine_program,
     evaluate_refinements,
 )
+from .self_repair import (
+    compute_discrepancy,
+    trace_prediction,
+    localize_faulty_rule,
+    refine_rule,
+    llm_suggest_rule_fix,
+    evaluate_repair_candidates,
+    RuleTraceEntry,
+    FaultHypothesis,
+)
 
 __all__ = [
     "RuleTrace",
@@ -22,4 +32,12 @@ __all__ = [
     "inject_feedback",
     "llm_refine_program",
     "evaluate_refinements",
+    "compute_discrepancy",
+    "trace_prediction",
+    "localize_faulty_rule",
+    "refine_rule",
+    "llm_suggest_rule_fix",
+    "evaluate_repair_candidates",
+    "RuleTraceEntry",
+    "FaultHypothesis",
 ]
