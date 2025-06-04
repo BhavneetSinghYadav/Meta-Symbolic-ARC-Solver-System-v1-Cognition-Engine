@@ -20,7 +20,11 @@ class SymbolType(Enum):
 
 
 class TransformationType(Enum):
-    """Supported symbolic transformation primitives."""
+    """Supported symbolic transformation primitives.
+
+    New types extend the basic set with conditional and functional logic as well
+    as region-scoped transformations.
+    """
 
     REPLACE = "REPLACE"
     TRANSLATE = "TRANSLATE"
@@ -28,6 +32,9 @@ class TransformationType(Enum):
     FILTER = "FILTER"
     ROTATE = "ROTATE"
     REFLECT = "REFLECT"
+    CONDITIONAL = "CONDITIONAL"
+    REGION = "REGION"
+    FUNCTIONAL = "FUNCTIONAL"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.value

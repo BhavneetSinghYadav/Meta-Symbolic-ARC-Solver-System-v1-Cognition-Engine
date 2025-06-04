@@ -41,6 +41,14 @@ arc_solver/
 
 Most other modules currently contain placeholders for future expansion (e.g. `feature_mapper.py`, `fallback_predictor.py`).
 
+### Symbolic DSL
+
+Simple programs can also be expressed using a lightweight DSL.  The helper
+function ``parse_program_expression`` converts expressions like ``"if color == 3
+and in region(Center): replace with 2"`` into :class:`SymbolicRule` objects.
+Programs are simulated using ``simulate_symbolic_program`` from
+``executor.simulator``.
+
 ### Dependencies
 
 The packages depend on each other as follows:

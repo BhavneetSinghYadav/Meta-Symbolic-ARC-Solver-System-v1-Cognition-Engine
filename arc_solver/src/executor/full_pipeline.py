@@ -8,6 +8,7 @@ from arc_solver.src.abstractions.abstractor import abstract
 from arc_solver.src.abstractions.rule_generator import generalize_rules
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
+from arc_solver.src.executor.simulator import simulate_symbolic_program
 from arc_solver.src.introspection import (
     build_trace,
     inject_feedback,
@@ -62,4 +63,19 @@ def solve_task(task: dict, *, introspect: bool = False):
     predictions = [simulate_rules(g, best_rules) for g in test_inputs]
     return predictions, test_outputs, traces, best_rules
 
-__all__ = ["solve_task"]
+
+def solve_task_iterative(task: dict, *, steps: int = 3, introspect: bool = False):
+    """Solve task using multi-step symbolic simulation."""
+    preds, outs, traces, rules = solve_task(task, introspect=introspect)
+    if not preds:
+        return preds, outs, traces, rules
+
+    refined_preds = []
+    for pred in preds:
+        grid = pred
+        for _ in range(1, steps):
+            grid = simulate_symbolic_program(grid, rules)
+        refined_preds.append(grid)
+    return refined_preds, outs, traces, rules
+
+__all__ = ["solve_task", "solve_task_iterative"]

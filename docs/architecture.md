@@ -18,6 +18,9 @@ Each stage corresponds to a set of modules under `arc_solver/src`.
    stored via the feedback and memory utilities located in
    [`feedback`](../arc_solver/src/feedback) and
    [`memory`](../arc_solver/src/memory).
+6. **Iterative refinement** – `solve_task_iterative` applies the symbolic
+   program for several steps while optional introspection modules adjust
+   the rule set between iterations.
 
 The overall flow can thus be summarized as:
 
