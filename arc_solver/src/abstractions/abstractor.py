@@ -13,41 +13,99 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationNature,
     TransformationType,
 )
+from arc_solver.src.segment.segmenter import zone_overlay
 
 
 # ---------------------------------------------------------------------------
 # Core extraction functions
 # ---------------------------------------------------------------------------
 
-def extract_color_change_rules(input_grid: Grid, output_grid: Grid) -> List[SymbolicRule]:
+def extract_color_change_rules(
+    input_grid: Grid,
+    output_grid: Grid,
+    zone_overlay: Optional[List[List[Symbol]]] = None,
+) -> List[SymbolicRule]:
     """Return rules describing consistent color replacements.
 
-    A simple cell-wise comparison is used to detect cases where all occurrences
-    of one color become another color.
+    If ``zone_overlay`` is provided, replacements are recorded per zone and
+    returned as conditional rules.
     """
     if input_grid.shape() != output_grid.shape():
         return []
 
-    mappings: Dict[int, set[int]] = {}
     h, w = input_grid.shape()
+
+    if zone_overlay is None:
+        mappings: Dict[int, set[int]] = {}
+        for r in range(h):
+            for c in range(w):
+                src = input_grid.get(r, c)
+                tgt = output_grid.get(r, c)
+                if src != tgt:
+                    mappings.setdefault(src, set()).add(tgt)
+
+        rules: List[SymbolicRule] = []
+        for src_color, tgts in mappings.items():
+            if len(tgts) == 1:
+                tgt_color = next(iter(tgts))
+                rule = SymbolicRule(
+                    transformation=Transformation(TransformationType.REPLACE),
+                    source=[Symbol(SymbolType.COLOR, str(src_color))],
+                    target=[Symbol(SymbolType.COLOR, str(tgt_color))],
+                    nature=TransformationNature.LOGICAL,
+                )
+                rules.append(rule)
+        return rules
+
+    # Zone-aware extraction
+    zone_maps: Dict[str, Dict[int, set[int]]] = {}
     for r in range(h):
         for c in range(w):
+            zone_sym = zone_overlay[r][c]
+            if zone_sym is None:
+                continue
+            zone = zone_sym.value
             src = input_grid.get(r, c)
             tgt = output_grid.get(r, c)
             if src != tgt:
-                mappings.setdefault(src, set()).add(tgt)
+                zmap = zone_maps.setdefault(zone, {})
+                zmap.setdefault(src, set()).add(tgt)
+
+    # Check if all zones share a consistent mapping
+    global_map: Dict[int, set[int]] = {}
+    for zone, mapping in zone_maps.items():
+        for src_color, tgts in mapping.items():
+            gm = global_map.setdefault(src_color, set())
+            gm.update(tgts)
 
     rules: List[SymbolicRule] = []
-    for src_color, tgts in mappings.items():
-        if len(tgts) == 1:
+    if all(len(tgts) == 1 for tgts in global_map.values()):
+        # produce unconditional rules when mappings are globally consistent
+        for src_color, tgts in global_map.items():
             tgt_color = next(iter(tgts))
-            rule = SymbolicRule(
-                transformation=Transformation(TransformationType.REPLACE),
-                source=[Symbol(SymbolType.COLOR, str(src_color))],
-                target=[Symbol(SymbolType.COLOR, str(tgt_color))],
-                nature=TransformationNature.LOGICAL,
+            rules.append(
+                SymbolicRule(
+                    transformation=Transformation(TransformationType.REPLACE),
+                    source=[Symbol(SymbolType.COLOR, str(src_color))],
+                    target=[Symbol(SymbolType.COLOR, str(tgt_color))],
+                    nature=TransformationNature.LOGICAL,
+                )
             )
-            rules.append(rule)
+        return rules
+
+    for zone, mapping in zone_maps.items():
+        for src_color, tgts in mapping.items():
+            if len(tgts) == 1:
+                tgt_color = next(iter(tgts))
+                rules.append(
+                    SymbolicRule(
+                        transformation=Transformation(TransformationType.REPLACE),
+                        source=[Symbol(SymbolType.COLOR, str(src_color))],
+                        target=[Symbol(SymbolType.COLOR, str(tgt_color))],
+                        nature=TransformationNature.LOGICAL,
+                        condition={"zone": zone},
+                    )
+                )
     return rules
 
 
@@ -151,8 +209,9 @@ def abstract(objects) -> List[SymbolicRule]:
         return []
 
     input_grid, output_grid = objects[0], objects[1]
+    overlay = zone_overlay(input_grid)
     rules: List[SymbolicRule] = []
-    rules.extend(extract_color_change_rules(input_grid, output_grid))
+    rules.extend(extract_color_change_rules(input_grid, output_grid, zone_overlay=overlay))
     rules.extend(extract_shape_based_rules(input_grid, output_grid))
     return rules
 

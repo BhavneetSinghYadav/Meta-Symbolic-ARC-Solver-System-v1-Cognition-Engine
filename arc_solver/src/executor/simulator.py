@@ -11,6 +11,7 @@ from arc_solver.src.symbolic.vocabulary import (
     Transformation,
     TransformationType,
 )
+from arc_solver.src.segment.segmenter import zone_overlay
 
 
 def _apply_replace(grid: Grid, rule: SymbolicRule) -> Grid:
@@ -29,8 +30,12 @@ def _apply_replace(grid: Grid, rule: SymbolicRule) -> Grid:
 
     h, w = grid.shape()
     new_data = [row[:] for row in grid.data]
+    zone = rule.condition.get("zone") if rule.condition else None
+    overlay = zone_overlay(grid) if zone else None
     for r in range(h):
         for c in range(w):
+            if zone and (overlay[r][c] is None or overlay[r][c].value != zone):
+                continue
             if new_data[r][c] == src_color:
                 new_data[r][c] = tgt_color
     return Grid(new_data)
@@ -44,12 +49,20 @@ def _apply_translate(grid: Grid, rule: SymbolicRule) -> Grid:
         return grid
     h, w = grid.shape()
     new_data = [[0 for _ in range(w)] for _ in range(h)]
+    zone = rule.condition.get("zone") if rule.condition else None
+    overlay = zone_overlay(grid) if zone else None
     for r in range(h):
         for c in range(w):
+            if zone and (overlay[r][c] is None or overlay[r][c].value != zone):
+                new_data[r][c] = grid.data[r][c]
+                continue
             nr = r + dy
             nc = c + dx
             if 0 <= nr < h and 0 <= nc < w:
                 new_data[nr][nc] = grid.data[r][c]
+            else:
+                # cells translated outside remain 0
+                pass
     return Grid(new_data)
 
 
@@ -71,9 +84,13 @@ def _apply_conditional(grid: Grid, rule: SymbolicRule) -> Grid:
         return grid
 
     h, w = grid.shape()
+    zone = rule.condition.get("zone") if rule.condition else None
+    overlay = zone_overlay(grid) if zone else None
     new_data = [row[:] for row in grid.data]
     for r in range(h):
         for c in range(w):
+            if zone and (overlay[r][c] is None or overlay[r][c].value != zone):
+                continue
             if new_data[r][c] != src_color:
                 continue
             if neighbor_color is not None:
