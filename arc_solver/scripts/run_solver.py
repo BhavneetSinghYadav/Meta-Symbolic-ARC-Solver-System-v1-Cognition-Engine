@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 
-from arc_solver.src.data.arc_dataset import ARCDataset
 from arc_solver.src.executor.full_pipeline import solve_task
 from arc_solver.src.evaluation.metrics import accuracy_score, aggregate_accuracy
+from arc_solver.scripts.utils import iter_arc_task_files
 
 
 def main() -> None:
@@ -16,14 +17,18 @@ def main() -> None:
     parser.add_argument("--introspect", action="store_true", help="Enable introspection")
     args = parser.parse_args()
 
-    dataset = ARCDataset(args.data_dir)
     task_scores = []
-    for task in dataset:
-        preds, targets, traces, rules = solve_task(task, introspect=args.introspect)
+    for tid, task, skipped in iter_arc_task_files(args.data_dir):
+        if skipped:
+            continue
+        try:
+            preds, targets, traces, rules = solve_task(task, introspect=args.introspect)
+        except Exception as exc:
+            print(f"[ERROR] Task {tid} — exception during solve(): {exc}", file=sys.stderr)
+            continue
         scores = [accuracy_score(p, t) for p, t in zip(preds, targets)]
         task_score = sum(scores) / len(scores) if scores else 0.0
         task_scores.append(task_score)
-        tid = task.get("id", "unknown")
         print(f"Task {tid} accuracy: {task_score:.3f}")
 
     overall = aggregate_accuracy(task_scores)

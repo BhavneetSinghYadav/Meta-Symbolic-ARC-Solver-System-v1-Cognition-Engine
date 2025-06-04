@@ -20,16 +20,19 @@ from arc_solver.src.core.grid import Grid
 def load_predictions(path: Path) -> dict[str, List[List[List[int]]]]:
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
-    preds = {}
+    preds: dict[str, List[List[List[int]]]] = {}
     for tid, obj in raw.items():
         data = obj.get("output")
         if data is None:
-            raise ValueError(f"Missing 'output' for task {tid}")
-        # normalize single grid vs list of grids
-        if data and isinstance(data[0][0], int):
-            preds[tid] = [data]
-        else:
-            preds[tid] = data
+            print(f"[WARN] Task {tid} — prediction missing from output JSON", file=sys.stderr)
+            continue
+        try:
+            if data and isinstance(data[0][0], int):
+                preds[tid] = [data]
+            else:
+                preds[tid] = data
+        except Exception:
+            print(f"[WARN] Task {tid} — malformed prediction entry", file=sys.stderr)
     return preds
 
 
@@ -82,28 +85,65 @@ def load_solutions(path: Path) -> dict[str, List[List[List[int]]]]:
 def evaluate(pred_path: Path, sol_path: Path) -> None:
     preds = load_predictions(pred_path)
     sols = load_solutions(sol_path)
+
+    all_ids = set(preds) | set(sols)
     total = 0
     correct = 0
-    for tid, gt_grids in sols.items():
+    very_bad: list[str] = []
+    borderline: list[str] = []
+    positive: list[str] = []
+
+    for tid in sorted(all_ids):
         pred_grids = preds.get(tid)
-        if pred_grids is None:
-            print(f"Missing prediction for {tid}")
+        gt_grids = sols.get(tid)
+
+        if pred_grids is None and gt_grids is None:
+            print(f"[WARN] Task {tid} missing from predictions and solutions", file=sys.stderr)
+            very_bad.append(tid)
             continue
+        if pred_grids is None:
+            print(f"[WARN] Task {tid} — prediction missing", file=sys.stderr)
+            borderline.append(tid)
+            continue
+        if gt_grids is None:
+            print(f"[WARN] Task {tid} — ground truth missing from solutions", file=sys.stderr)
+            borderline.append(tid)
+            continue
+
         if len(pred_grids) != len(gt_grids):
             print(
-                f"Count mismatch for {tid}: predicted {len(pred_grids)} vs gt {len(gt_grids)}"
+                f"Count mismatch for {tid}: predicted {len(pred_grids)} vs gt {len(gt_grids)}",
+                file=sys.stderr,
             )
+
         for i, gt in enumerate(gt_grids):
             if i >= len(pred_grids):
-                break
+                print(f"[WARN] Task {tid} index {i} — prediction missing", file=sys.stderr)
+                continue
             pg = pred_grids[i]
-            if len(pg) != len(gt) or len(pg[0]) != len(gt[0]):
-                print(f"Shape mismatch {tid} index {i}: pred={pg} gt={gt}")
-            if Grid(pg).compare_to(Grid(gt)) == 1.0:
-                correct += 1
-            total += 1
+            try:
+                if len(pg) != len(gt) or len(pg[0]) != len(gt[0]):
+                    print(f"Shape mismatch {tid} index {i}: pred={pg} gt={gt}", file=sys.stderr)
+                if Grid(pg).compare_to(Grid(gt)) == 1.0:
+                    correct += 1
+                total += 1
+            except Exception as exc:
+                print(f"[ERROR] Task {tid} index {i}: {exc}", file=sys.stderr)
+
+        if pred_grids and gt_grids and correct > 0:
+            positive.append(tid)
+
     acc = correct / total * 100 if total else 0.0
     print(f"Accuracy: {correct}/{total} = {acc:.2f}%")
+
+    if very_bad or borderline:
+        print("Summary:")
+        if very_bad:
+            print("VERY_BAD:", ", ".join(very_bad))
+        if borderline:
+            print("BORDERLINE:", ", ".join(borderline))
+        if positive:
+            print("POSITIVE:", ", ".join(positive))
 
 
 def main() -> None:
