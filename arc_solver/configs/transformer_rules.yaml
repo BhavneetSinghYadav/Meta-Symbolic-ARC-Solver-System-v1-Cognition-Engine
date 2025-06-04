@@ -1,0 +1,4 @@
+# Rules for transformation library
+rules:
+  - name: example_rule
+    pattern: "A -> B"

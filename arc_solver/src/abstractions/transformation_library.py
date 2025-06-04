@@ -1,0 +1,3 @@
+"""Holds known transformations."""
+
+TRANSFORMATIONS = []
