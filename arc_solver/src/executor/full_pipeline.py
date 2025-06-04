@@ -9,20 +9,14 @@ from arc_solver.src.abstractions.rule_generator import generalize_rules
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.executor.simulator import simulate_symbolic_program
+from arc_solver.src.rank_rule_sets import probabilistic_rank_rule_sets
+from arc_solver.src.combine_predictions import combine_predictions
 from arc_solver.src.introspection import (
     build_trace,
     inject_feedback,
     llm_refine_program,
     evaluate_refinements,
 )
-
-
-def _score_rules(rules: List, pairs: List[Tuple[Grid, Grid]]) -> float:
-    total = 0.0
-    for inp, out in pairs:
-        pred = simulate_rules(inp, rules)
-        total += pred.compare_to(out)
-    return total / len(pairs) if pairs else 0.0
 
 
 def solve_task(task: dict, *, introspect: bool = False):
@@ -39,14 +33,8 @@ def solve_task(task: dict, *, introspect: bool = False):
         rules = generalize_rules(rules)
         rule_sets.append(rules)
 
-    # Select best rule set by average training score
-    best_rules: List = []
-    best_score = -1.0
-    for rules in rule_sets:
-        score = _score_rules(rules, train_pairs)
-        if score > best_score:
-            best_score = score
-            best_rules = rules
+    ranked_rules = probabilistic_rank_rule_sets(rule_sets, train_pairs)
+    best_rules: List = ranked_rules[0][0] if ranked_rules else []
 
     # Optional introspection/refinement using first training example
     traces = []
@@ -60,7 +48,15 @@ def solve_task(task: dict, *, introspect: bool = False):
         best_rules = [refined]
         traces.append(trace)
 
-    predictions = [simulate_rules(g, best_rules) for g in test_inputs]
+    predictions = []
+    for g in test_inputs:
+        ensemble = []
+        for rules, prob in ranked_rules:
+            pred = simulate_rules(g, rules)
+            ensemble.append((pred, prob))
+        final = combine_predictions(ensemble)
+        predictions.append(final)
+
     return predictions, test_outputs, traces, best_rules
 
 
