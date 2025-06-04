@@ -37,6 +37,22 @@ def build_submission_json(
                 raise ValueError(
                     f"Prediction for {task.task_id} index {i} is malformed: {pred}"
                 )
+
+            if task.ground_truth and i < len(task.ground_truth):
+                ref_shape = task.ground_truth[i].shape()
+            elif task.train:
+                ref_shape = task.train[0][1].shape()
+            else:
+                ref_shape = (len(grid), len(grid[0]))
+
+            h, w = ref_shape
+            if (len(grid), len(grid[0])) != ref_shape:
+                flat = [v for row in grid for v in row]
+                if len(flat) == h * w:
+                    grid = [flat[j * w:(j + 1) * w] for j in range(h)]
+                else:
+                    grid = [[0 for _ in range(w)] for _ in range(h)]
+
             outputs.append(grid)
         submission[task.task_id] = {
             "output": outputs if len(outputs) > 1 else outputs[0]
