@@ -1,5 +1,10 @@
 from pathlib import Path
-from arc_solver.src.memory.memory_store import save_rule_program, load_memory, retrieve_similar_signatures
+import json
+from arc_solver.src.memory.memory_store import (
+    save_rule_program,
+    load_memory,
+    retrieve_similar_signatures,
+)
 from arc_solver.src.symbolic.rule_language import parse_rule
 
 
@@ -14,3 +19,21 @@ def test_memory_save_and_retrieve(tmp_path):
     retrieved = retrieve_similar_signatures("sigA", mem_path)
     assert retrieved
     assert retrieved[0]["rules"][0].transformation.ttype.name == "REPLACE"
+
+
+def test_load_memory_filters_invalid(tmp_path):
+    mem_path = tmp_path / "mem.json"
+    data = [
+        {
+            "task_id": "t1",
+            "signature": "sig",
+            "rules": [
+                "REPLACE [COLOR=0] -> [COLOR=1]",
+                "REPLACE [COLOR=11] -> [COLOR=2]",
+            ],
+        }
+    ]
+    mem_path.write_text(json.dumps(data))
+
+    mem = load_memory(mem_path)
+    assert mem[0]["rules"] == ["REPLACE [COLOR=0] -> [COLOR=1]"]

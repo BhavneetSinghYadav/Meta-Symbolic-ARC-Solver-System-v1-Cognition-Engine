@@ -5,6 +5,7 @@ from .memory_store import (
     save_rule_program,
     load_memory,
     retrieve_similar_signatures,
+    get_last_load_stats,
     preload_memory_from_kaggle_input,
 )
 
@@ -13,6 +14,7 @@ __all__ = [
     "save_rule_program",
     "load_memory",
     "retrieve_similar_signatures",
+    "get_last_load_stats",
     "preload_memory_from_kaggle_input",
 ]
 

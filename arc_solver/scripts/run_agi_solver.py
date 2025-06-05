@@ -269,7 +269,14 @@ def main() -> None:
     preload_memory_from_kaggle_input()
     config_sanity_check(args)
     logger = get_logger("run_agi_solver")
-    config_loader.print_runtime_config()
+
+    # Load memory once to report stats
+    from arc_solver.src.memory import load_memory, get_last_load_stats
+
+    load_memory(verbose=True)
+    loaded, skipped = get_last_load_stats()
+    config_loader.print_system_health(loaded, skipped)
+
     logger.info(f"Using config: {config_loader.META_CONFIG}")
 
     split_prefix = {

@@ -9,20 +9,64 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 from arc_solver.src.symbolic.rule_language import parse_rule, rule_to_dsl
-from arc_solver.src.symbolic.vocabulary import SymbolicRule
+from arc_solver.src.symbolic.vocabulary import SymbolicRule, is_valid_symbol
+from arc_solver.src.utils import config_loader
 from arc_solver.src.utils.signature_extractor import similarity_score
 
 
 _DEFAULT_PATH = Path("rule_memory.json")
 
 
-def load_memory(path: str | Path = _DEFAULT_PATH) -> List[Dict[str, Any]]:
-    """Return list of stored rule programs."""
+_LAST_LOAD_STATS: tuple[int, int] = (0, 0)
+
+
+def load_memory(path: str | Path = _DEFAULT_PATH, *, verbose: bool = False) -> List[Dict[str, Any]]:
+    """Return list of stored rule programs, filtering malformed entries."""
+    global _LAST_LOAD_STATS
     p = Path(path)
     if not p.exists():
+        _LAST_LOAD_STATS = (0, 0)
         return []
     with p.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+
+    if config_loader.LAZY_MEMORY_LOADING:
+        loaded = sum(len(e.get("rules", [])) for e in data)
+        _LAST_LOAD_STATS = (loaded, 0)
+        if verbose:
+            print(f"Loaded {loaded} rules (lazy)")
+        return data
+
+    cleaned: List[Dict[str, Any]] = []
+    discarded = 0
+    loaded = 0
+    for entry in data:
+        valid_rules: List[str] = []
+        for r in entry.get("rules", []):
+            try:
+                rule = parse_rule(r)
+            except Exception:
+                discarded += 1
+                continue
+            if not rule.is_well_formed() or not all(
+                is_valid_symbol(s) for s in rule.source + rule.target
+            ):
+                discarded += 1
+                continue
+            valid_rules.append(rule_to_dsl(rule))
+        loaded += len(valid_rules)
+        entry["rules"] = valid_rules
+        cleaned.append(entry)
+
+    _LAST_LOAD_STATS = (loaded, discarded)
+    if verbose:
+        print(f"Loaded {loaded} rules, {discarded} discarded as malformed")
+    return cleaned
+
+
+def get_last_load_stats() -> tuple[int, int]:
+    """Return counts of rules loaded and discarded in the last load operation."""
+    return _LAST_LOAD_STATS
 
 
 def save_rule_program(
@@ -74,7 +118,12 @@ def retrieve_similar_signatures(
     return results
 
 
-__all__ = ["save_rule_program", "load_memory", "retrieve_similar_signatures"]
+__all__ = [
+    "save_rule_program",
+    "load_memory",
+    "retrieve_similar_signatures",
+    "get_last_load_stats",
+]
 
 
 def preload_memory_from_kaggle_input() -> None:
