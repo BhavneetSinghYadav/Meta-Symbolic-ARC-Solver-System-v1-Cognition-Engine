@@ -13,11 +13,16 @@ except Exception:  # pragma: no cover - fallback when library missing
 
 from arc_solver.src.symbolic.rule_language import parse_rule
 
-_MODEL_PATH = Path("/kaggle/input/llm-models/tinyllama.gguf")
+_MODEL_PATH = Path(
+    os.environ.get(
+        "LOCAL_GGUF_MODEL_PATH",
+        "/kaggle/working/tinyllama-1.1b-chat-v1.0.q4_K_M.gguf",
+    )
+)
 
 if Llama is not None and _MODEL_PATH.exists():
     try:  # pragma: no cover - external model load
-        llm = Llama(model_path=str(_MODEL_PATH), n_ctx=1024)
+        llm = Llama(model_path=str(_MODEL_PATH), n_ctx=1024, n_threads=4)
     except Exception:  # pragma: no cover - handle load failure
         llm = None
 else:  # pragma: no cover - missing model
@@ -85,10 +90,26 @@ def local_narrate(trace: Any) -> str:
     return _invoke(build_narration_prompt(trace))
 
 
+def repair_symbolic_rule(trace_dsl: str, feedback_signal: str) -> str:
+    """Return a corrected rule DSL using the local model."""
+
+    prompt = (
+        "You are a symbolic rule repair engine. Given a broken rule and error "
+        "feedback, output a corrected version.\n\n"
+        f"Broken Rule:\n{trace_dsl}\n\n"
+        f"Feedback:\n{feedback_signal}\n\n"
+        "Repaired Rule:"
+    )
+    result = llm(prompt, max_tokens=128, stop=["\n"], echo=False) if llm else {
+        "choices": [{"text": ""}]}
+    return result["choices"][0]["text"].strip()
+
+
 __all__ = [
     "local_refine_program",
     "local_suggest_rule_fix",
     "local_narrate",
+    "repair_symbolic_rule",
     "build_refine_prompt",
     "build_fix_prompt",
     "build_narration_prompt",

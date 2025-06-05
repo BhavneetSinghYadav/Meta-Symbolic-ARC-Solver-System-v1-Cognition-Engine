@@ -30,7 +30,8 @@ def load_meta_config(path: Optional[Path] = None) -> Dict[str, Any]:
 
 
 META_CONFIG: Dict[str, Any] = load_meta_config()
-OFFLINE_MODE: bool = META_CONFIG.get("llm_mode", "online") == "offline"
+LLM_MODE: str = str(META_CONFIG.get("llm_mode", "online"))
+OFFLINE_MODE: bool = LLM_MODE != "online"
 REPAIR_ENABLED: bool = META_CONFIG.get("repair_enabled", False)
 REPAIR_THRESHOLD: float = float(META_CONFIG.get("repair_threshold", 0.7))
 _REFLEX_CONF = META_CONFIG.get("reflex_override", {})
@@ -65,11 +66,17 @@ IGNORE_MEMORY_SHAPE_CONSTRAINT: bool = bool(
 
 
 
+def set_llm_mode(mode: str) -> None:
+    """Override LLM mode at runtime."""
+    global LLM_MODE, OFFLINE_MODE
+    LLM_MODE = mode
+    OFFLINE_MODE = mode != "online"
+    META_CONFIG["llm_mode"] = mode
+
+
 def set_offline_mode(value: bool) -> None:
-    """Override offline mode at runtime."""
-    global OFFLINE_MODE
-    OFFLINE_MODE = value
-    META_CONFIG["llm_mode"] = "offline" if value else "online"
+    """Backward compatible setter for offline mode."""
+    set_llm_mode("offline" if value else "online")
 
 
 def set_repair_enabled(value: bool) -> None:
@@ -166,7 +173,7 @@ def print_runtime_config() -> None:
     """Print a summary of the current runtime configuration."""
     info = {
         "introspect": INTROSPECTION_ENABLED,
-        "llm_mode": "offline" if OFFLINE_MODE else "online",
+        "llm_mode": LLM_MODE,
         "use_memory": MEMORY_ENABLED,
         "self_repair": REPAIR_ENABLED,
         "regime_override": REFLEX_OVERRIDE_ENABLED,
