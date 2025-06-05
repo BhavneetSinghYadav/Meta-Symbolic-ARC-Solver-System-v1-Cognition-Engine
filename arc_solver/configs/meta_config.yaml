@@ -17,6 +17,10 @@ use_memory: false
 use_structural_attention: true
 structural_attention_weight: 0.2
 lazy_memory: false
+memory_similarity_threshold: 0.95
+memory_diagnostics: false
+sparse_mode: false
+fallback_on_abstraction_fail: false
 regime_thresholds:
   entropy_low: 0.1
   zone_alignment_cutoff: 0.3
