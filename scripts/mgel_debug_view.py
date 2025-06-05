@@ -186,7 +186,7 @@ def main() -> None:
     print_grid("Target Grid", target_grid, use_color=args.color)
 
     print("\n\U0001F9E0 Extracting Symbolic Rules...")
-    rule_programs = abstract(input_grid, target_grid)
+    rule_programs = abstract([input_grid, target_grid])
 
     if not rule_programs:
         print("\u274C No symbolic rules extracted.")
