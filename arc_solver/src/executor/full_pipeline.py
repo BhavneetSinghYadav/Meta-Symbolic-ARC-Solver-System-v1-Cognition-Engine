@@ -142,11 +142,11 @@ def solve_task(
             rule_sets.append(select_independent_rules(p))
 
     ranked_rules = probabilistic_rank_rule_sets(rule_sets, train_pairs)
-    if config_loader.META_CONFIG.get("use_structural_attention") and train_pairs:
+    if config_loader.USE_STRUCTURAL_ATTENTION and train_pairs:
         ranked_rules = apply_structural_attention(
             train_pairs[0][0],
             ranked_rules,
-            config_loader.META_CONFIG.get("structural_attention_weight", 0.2),
+            config_loader.STRUCTURAL_ATTENTION_WEIGHT,
         )
     best_rules: List = ranked_rules[0][0] if ranked_rules else []
 
