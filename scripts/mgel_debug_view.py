@@ -195,29 +195,27 @@ def main() -> None:
     best_result = None
     best_score = -1.0
 
-    for idx, rule_set in enumerate(rule_programs):
-        print(f"\nRule Program {idx + 1}:")
-        for r in rule_set.rules:
-            print(" \u25AA", rule_to_dsl(r))
+    for idx, rule in enumerate(rule_programs):
+        print(f"\nRule {idx + 1}:")
+        print(" \u25AA", rule_to_dsl(rule))
 
         if args.step_by_step:
             working_grid = Grid([row[:] for row in input_grid.data])
-            for rule in rule_set.rules:
-                dsl = rule_to_dsl(rule)
-                zone = rule.condition.get("zone")
-                print(
-                    f" \u25AA Rule: {dsl} | Zone: {zone} | Type: {rule.__class__.__name__}"
+            dsl = rule_to_dsl(rule)
+            zone = rule.condition.get("zone")
+            print(
+                f" \u25AA Rule: {dsl} | Zone: {zone} | Type: {rule.__class__.__name__}"
+            )
+            try:
+                working_grid = simulate_rules(working_grid, [rule])
+                print("    \u2705 Rule applied successfully")
+                print_grid(
+                    "Intermediate Grid", working_grid, use_color=args.color
                 )
-                try:
-                    working_grid = simulate_rules(working_grid, [rule])
-                    print("    \u2705 Rule applied successfully")
-                    print_grid(
-                        "Intermediate Grid", working_grid, use_color=args.color
-                    )
-                except Exception as e:
-                    print(f"    \u274C Rule failed: {e}")
+            except Exception as e:
+                print(f"    \u274C Rule failed: {e}")
         try:
-            pred_grid = simulate_rules(input_grid, rule_set.rules)
+            pred_grid = simulate_rules(input_grid, [rule])
             print_grid("Predicted Grid", pred_grid, use_color=args.color)
             score = pred_grid.compare_to(target_grid)
             print(f"\u2705 Prediction Score: {score:.3f}")
@@ -226,7 +224,7 @@ def main() -> None:
             if args.trace:
                 try:
                     from arc_solver.src.introspection import build_trace, validate_trace
-                    trace = build_trace(rule_set.rules[0], input_grid, pred_grid, target_grid)
+                    trace = build_trace(rule, input_grid, pred_grid, target_grid)
                     metrics = validate_trace(trace)
                     print(
                         " Trace Summary:",
@@ -240,7 +238,7 @@ def main() -> None:
             diff_grid = [["✓" if a == b else "✗" for a, b in zip(pr, tg)] for pr, tg in zip(pred_grid.data, target_grid.data)]
             candidate = {
                 "task_id": task_id,
-                "rules": [rule_to_dsl(r) for r in rule_set.rules],
+                "rules": [rule_to_dsl(rule)],
                 "prediction_score": score,
                 "grid_input": input_grid.data,
                 "grid_pred": pred_grid.data,
