@@ -7,3 +7,8 @@ reflex_override:
   enabled: true
   threshold: 0.45
   default_path: fallback
+prior_injection:
+  enabled: true
+  use_motifs: true
+  inject_from_memory: true
+  fallback_only: false

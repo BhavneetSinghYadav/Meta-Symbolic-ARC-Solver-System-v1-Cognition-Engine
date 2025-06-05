@@ -101,6 +101,9 @@ def _predict(
     threshold: float = 0.9,
     use_memory: bool = False,
     use_prior: bool = False,
+    use_deep_priors: bool = False,
+    prior_threshold: float = 0.4,
+    motif_file: str | None = None,
 ):
     """Return predictions for ``task`` optionally refining with introspection."""
 
@@ -115,6 +118,9 @@ def _predict(
         introspect=False,
         use_memory=use_memory,
         use_prior=use_prior,
+        use_deep_priors=use_deep_priors,
+        prior_threshold=prior_threshold,
+        motif_file=motif_file,
         task_id=task.task_id,
     )
 
@@ -141,6 +147,9 @@ def _predict(
                 introspect=True,
                 use_memory=use_memory,
                 use_prior=use_prior,
+                use_deep_priors=use_deep_priors,
+                prior_threshold=prior_threshold,
+                motif_file=motif_file,
                 task_id=task.task_id,
             )
             norm_preds = _normalize(preds)
@@ -200,6 +209,9 @@ def main() -> None:
     )
     parser.add_argument("--use_memory", action="store_true", help="Enable rule memory")
     parser.add_argument("--use_prior", action="store_true", help="Use prior templates")
+    parser.add_argument("--use_deep_priors", action="store_true", help="Enable deep prior injection")
+    parser.add_argument("--prior_threshold", type=float, default=0.4, help="Signature similarity threshold")
+    parser.add_argument("--motif_file", type=str, default=None, help="Motif library YAML")
     parser.add_argument("--reflex_override", action="store_true", help="Enable regime override")
     parser.add_argument("--regime_threshold", type=float, default=0.45, help="Override threshold")
     parser.add_argument(
@@ -227,6 +239,8 @@ def main() -> None:
     config_loader.set_repair_threshold(args.repair_threshold)
     config_loader.set_reflex_override(args.reflex_override)
     config_loader.set_regime_threshold(args.regime_threshold)
+    config_loader.set_prior_injection(args.use_deep_priors)
+    config_loader.set_prior_threshold(int(args.prior_threshold))
 
     split_prefix = {
         "train": "arc-agi_training",
@@ -253,6 +267,9 @@ def main() -> None:
             threshold=args.threshold,
             use_memory=args.use_memory,
             use_prior=args.use_prior,
+            use_deep_priors=args.use_deep_priors,
+            prior_threshold=args.prior_threshold,
+            motif_file=args.motif_file,
         )
         for i, grid in enumerate(outputs):
             predictions[(task.task_id, i)] = grid

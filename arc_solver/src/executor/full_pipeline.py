@@ -21,6 +21,14 @@ from arc_solver.src.memory.memory_store import (
 from arc_solver.src.utils.signature_extractor import extract_task_signature
 from arc_solver.src.fallback import prioritize, soft_vote
 from arc_solver.src.executor.prior_templates import load_prior_templates
+from arc_solver.src.memory.deep_prior_loader import (
+    load_prior_templates as deep_load_prior_templates,
+    load_motifs,
+    match_task_signature_to_prior,
+    select_motifs,
+)
+from arc_solver.src.meta_generalizer import generalize_rule_program
+from arc_solver.src.symbolic.rule_language import parse_rule
 from arc_solver.src.executor.fallback_predictor import predict as fallback_predict
 from arc_solver.src.introspection import (
     build_trace,
@@ -39,6 +47,9 @@ def solve_task(
     introspect: bool = False,
     use_memory: bool = False,
     use_prior: bool = False,
+    use_deep_priors: bool = False,
+    prior_threshold: float = 0.4,
+    motif_file: str | None = None,
     task_id: str | None = None,
     debug: bool = False,
     log_dir: str = "logs",
@@ -86,6 +97,17 @@ def solve_task(
                 "reflex override triggered; using %s",
                 config_loader.DEFAULT_OVERRIDE_PATH,
             )
+        if use_deep_priors and config_loader.PRIOR_INJECTION_ENABLED:
+            signature = extract_task_signature(task)
+            prior_sets = match_task_signature_to_prior(signature, prior_threshold)
+            if prior_sets:
+                preds = []
+                for g in test_inputs:
+                    try:
+                        preds.append(simulate_rules(g, prior_sets[0], logger=logger))
+                    except Exception:
+                        preds.append(fallback_predict(g))
+                return preds, test_outputs, [], prior_sets[0]
         predictions = [fallback_predict(g) for g in test_inputs]
         return predictions, test_outputs, [], []
 
@@ -103,18 +125,35 @@ def solve_task(
             rules = simple_fallback
         rule_sets.append(rules)
 
+    # Inject motifs before ranking -------------------------------------------
+    signature = extract_task_signature(task)
+    if use_deep_priors and config_loader.PRIOR_INJECTION_ENABLED:
+        motifs = []
+        if config_loader.PRIOR_USE_MOTIFS:
+            motifs = select_motifs(signature, load_motifs(motif_file) if motif_file else None)
+        prior_sets = match_task_signature_to_prior(signature, prior_threshold)
+        for m in motifs[: config_loader.PRIOR_MAX_INJECT]:
+            try:
+                prior_sets.append([parse_rule(m["rule_dsl"])])
+            except Exception:
+                continue
+        for p in prior_sets[: config_loader.PRIOR_MAX_INJECT]:
+            rule_sets.append(select_independent_rules(p))
+
     ranked_rules = probabilistic_rank_rule_sets(rule_sets, train_pairs)
     best_rules: List = ranked_rules[0][0] if ranked_rules else []
 
     # Recall programs from memory or priors ---------------------------------
-    signature = extract_task_signature(task)
     candidate_sets = [select_independent_rules(rs) for rs, _ in ranked_rules]
     if use_memory:
         recalled = retrieve_similar_signatures(signature)
         for entry in recalled:
-            candidate_sets.append(select_independent_rules(entry["rules"]))
+            generalized = generalize_rule_program(entry["rules"], signature)
+            candidate_sets.append(select_independent_rules(generalized))
     if use_prior:
-        candidate_sets.extend(select_independent_rules(rs) for rs in load_prior_templates())
+        candidate_sets.extend(
+            select_independent_rules(generalize_rule_program(rs, signature)) for rs in load_prior_templates()
+        )
 
     # Score all candidates on training examples
     def _train_score(rules: List, mask: List[List[bool]] | None = None) -> float:

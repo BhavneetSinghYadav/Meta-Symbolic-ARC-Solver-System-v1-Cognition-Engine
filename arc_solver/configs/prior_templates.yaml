@@ -1,0 +1,12 @@
+- name: replace_black_to_white
+  type: color_replace
+  signature: "2-colors_1x1_vsym"
+  frequency: 100
+  rules:
+    - "REPLACE [COLOR=0] -> [COLOR=1]"
+- name: mirror_fill_left
+  type: symmetry_fill
+  signature: "_vsym"
+  frequency: 50
+  rules:
+    - "REFLECT [ZONE=left] -> [ZONE=right]"
