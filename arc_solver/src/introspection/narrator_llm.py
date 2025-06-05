@@ -13,6 +13,8 @@ from typing import Any, Dict
 
 from .trace_builder import RuleTrace
 from .introspective_validator import validate_trace
+from arc_solver.src.utils.config_loader import OFFLINE_MODE
+from . import llm_engine
 
 try:  # pragma: no cover - optional dependency
     import openai
@@ -55,6 +57,12 @@ def narrate_trace(
         metrics=json.dumps(metrics),
         context=json.dumps(trace.symbolic_context),
     )
+
+    if OFFLINE_MODE and use_llm:
+        try:
+            return llm_engine.local_narrate(trace)
+        except Exception:
+            pass
 
     if openai is not None and use_llm:
         try:  # pragma: no cover - optional external call

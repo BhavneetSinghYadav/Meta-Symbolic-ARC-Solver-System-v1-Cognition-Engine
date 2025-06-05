@@ -19,6 +19,8 @@ from arc_solver.src.symbolic import (
 from .trace_builder import RuleTrace
 from .introspective_validator import validate_trace
 from .narrator_llm import narrate_trace
+from arc_solver.src.utils.config_loader import OFFLINE_MODE
+from . import llm_engine
 
 try:  # pragma: no cover - optional dependency
     import openai
@@ -107,9 +109,16 @@ def _heuristic_refinements(trace: RuleTrace, feedback: FeedbackSignal) -> List[S
 
 
 def llm_refine_program(trace: RuleTrace, feedback: FeedbackSignal) -> List[SymbolicRule]:
-    """Return refined rule candidates using GPT or heuristic fallback."""
+    """Return refined rule candidates using a local LLM or heuristics."""
 
-    prompt = None
+    if OFFLINE_MODE:
+        try:
+            rules = llm_engine.local_refine_program(trace, feedback)
+            if rules and rules != [trace.rule]:
+                return rules
+        except Exception:
+            pass
+
     if openai is not None:
         dsl = str(trace.rule)
         prompt = (
