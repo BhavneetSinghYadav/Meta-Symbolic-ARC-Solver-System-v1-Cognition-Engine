@@ -15,6 +15,8 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationType,
 )
 from .trace_builder import build_trace, RuleTrace
+from arc_solver.src.utils.config_loader import OFFLINE_MODE
+from . import llm_engine
 
 try:  # pragma: no cover - optional dependency
     import openai
@@ -146,8 +148,14 @@ def refine_rule(rule: SymbolicRule, context: Dict[str, Tuple[int, int]]) -> Opti
 # ---------------------------------------------------------------------------
 
 def llm_suggest_rule_fix(entry: RuleTraceEntry, discrepancies: Dict[Tuple[int, int], Tuple[int, int]]) -> Optional[SymbolicRule]:
-    """Use GPT (if available) to propose a replacement rule."""
-    prompt = None
+    """Use a local LLM or heuristics to propose a replacement rule."""
+
+    if OFFLINE_MODE:
+        try:
+            return llm_engine.local_suggest_rule_fix(entry, discrepancies)
+        except Exception:
+            pass
+
     if openai is not None:
         before_text = entry.before.to_list()
         after_text = entry.after.to_list()
@@ -173,6 +181,7 @@ def llm_suggest_rule_fix(entry: RuleTraceEntry, discrepancies: Dict[Tuple[int, i
             return parse_rule(text)
         except Exception:
             pass
+
     # Fallback to heuristic refinement
     return refine_rule(entry.rule, discrepancies)
 

@@ -200,7 +200,16 @@ def main() -> None:
     )
     parser.add_argument("--use_memory", action="store_true", help="Enable rule memory")
     parser.add_argument("--use_prior", action="store_true", help="Use prior templates")
+    parser.add_argument(
+        "--llm_mode",
+        choices=["online", "offline"],
+        default="online",
+        help="Use local LLM when offline",
+    )
     args = parser.parse_args()
+
+    from arc_solver.src.utils import config_loader
+    config_loader.set_offline_mode(args.llm_mode == "offline")
 
     split_prefix = {
         "train": "arc-agi_training",

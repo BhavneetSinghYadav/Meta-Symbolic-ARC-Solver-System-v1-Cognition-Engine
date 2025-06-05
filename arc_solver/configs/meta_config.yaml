@@ -1,2 +1,3 @@
 # Meta configuration for entire solver
 logging_level: INFO
+llm_mode: offline
