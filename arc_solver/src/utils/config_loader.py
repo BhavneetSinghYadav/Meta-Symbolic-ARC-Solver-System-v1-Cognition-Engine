@@ -50,6 +50,7 @@ STRUCTURAL_ATTENTION_WEIGHT: float = float(META_CONFIG.get("structural_attention
 
 INTROSPECTION_ENABLED: bool = bool(META_CONFIG.get("introspect", False))
 MEMORY_ENABLED: bool = bool(META_CONFIG.get("use_memory", False))
+LAZY_MEMORY_LOADING: bool = bool(META_CONFIG.get("lazy_memory", False))
 
 
 def set_offline_mode(value: bool) -> None:
@@ -141,4 +142,16 @@ def print_runtime_config() -> None:
     print("Runtime configuration:")
     for k, v in info.items():
         print(f"  {k}: {v}")
+
+
+def print_system_health(memory_loaded: int, memory_skipped: int) -> None:
+    """Print runtime system health overview."""
+    print(
+        f"\u2714 Memory rules: {memory_loaded} loaded, {memory_skipped} skipped"
+    )
+    print(
+        f"\u2714 Structural attention: {'ENABLED' if USE_STRUCTURAL_ATTENTION else 'DISABLED'}"
+    )
+    print("\u2714 Fallback predictor: ACTIVATED")
+    print(f"\u2714 Self-repair: {'ON' if REPAIR_ENABLED else 'OFF'}")
 

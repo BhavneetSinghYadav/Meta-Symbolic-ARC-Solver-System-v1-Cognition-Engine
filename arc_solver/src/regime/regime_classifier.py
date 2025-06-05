@@ -55,31 +55,37 @@ def compute_task_signature(
     symmetry = 0
     colors = set()
 
+    max_warnings = 5
+    warning_count = 0
+
     for idx, (inp, out) in enumerate(train_pairs):
         try:
             if inp is None or out is None:
                 raise ValueError("pair contains None")
             if inp.shape() != out.shape():
-                if logger:
+                if logger and warning_count < max_warnings:
                     logger.warning(
                         "pair %d shape mismatch %s vs %s, skipping",
                         idx,
                         inp.shape(),
                         out.shape(),
                     )
+                    warning_count += 1
                 continue
             h, w = inp.shape()
             if h == 0 or w == 0:
-                if logger:
+                if logger and warning_count < max_warnings:
                     logger.warning("pair %d has empty grid, skipping", idx)
+                    warning_count += 1
                 continue
             sizes.append(h * w)
             try:
                 entropies.append(_grid_entropy(inp))
                 entropies.append(_grid_entropy(out))
             except Exception as exc:  # pragma: no cover - safety
-                if logger:
+                if logger and warning_count < max_warnings:
                     logger.warning("entropy failed for pair %d: %s", idx, exc)
+                    warning_count += 1
                 entropies.append(0.0)
                 entropies.append(0.0)
             if inp.data == inp.flip_horizontal().data or inp.data == inp.flip_horizontal().flip_horizontal().data:
@@ -95,12 +101,14 @@ def compute_task_signature(
                 )
                 diffs.append(diff / (h * w))
             except Exception as exc:  # pragma: no cover - safety
-                if logger:
+                if logger and warning_count < max_warnings:
                     logger.warning("diff failed for pair %d: %s", idx, exc)
+                    warning_count += 1
                 diffs.append(0.0)
         except Exception as exc:  # pragma: no cover - safety
-            if logger:
+            if logger and warning_count < max_warnings:
                 logger.warning("error processing pair %d: %s", idx, exc)
+                warning_count += 1
             continue
 
     if not sizes:

@@ -88,6 +88,11 @@ class Symbol:
         return f"Symbol(type={self.type}, value={self.value!r})"
 
 
+def is_valid_symbol(symbol: Symbol) -> bool:
+    """Return ``True`` if ``symbol`` has a legal value."""
+    return symbol.is_valid()
+
+
 @dataclass(frozen=True)
 class Transformation:
     """A symbolic transformation with optional parameters."""
@@ -150,4 +155,5 @@ __all__ = [
     "SymbolicRule",
     "validate_color_range",
     "MAX_COLOR",
+    "is_valid_symbol",
 ]
