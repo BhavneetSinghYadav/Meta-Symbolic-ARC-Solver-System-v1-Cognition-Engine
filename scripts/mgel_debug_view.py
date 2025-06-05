@@ -3,7 +3,11 @@
 This script loads a single ARC task, extracts symbolic rules using the
 ``abstract`` function, and then applies each rule while printing a detailed
 trace.  It can load a task by ``task_id`` from a directory of ARC JSON files
-or use manually injected matrices.  Optional ``--color`` and ``--step_by_step`` flags enable coloured grid output and step-by-step rule execution. ``--trace`` prints introspection summaries.
+or use manually injected matrices.  Optional ``--color`` and ``--step_by_step``
+flags enable coloured grid output and step-by-step rule execution. Additional
+flags ``--manual_input`` and ``--manual_target`` allow matrices to be loaded
+from JSON files, while ``--dump_to`` saves an evaluation summary to disk.
+``--trace`` prints introspection summaries.
 
 Usage::
 
@@ -14,6 +18,7 @@ used instead.
 """
 
 import argparse
+import json
 from pathlib import Path
 
 from arc_solver.src.data.arc_dataset import ARCDataset, load_arc_task
@@ -61,6 +66,45 @@ def print_grid_diff(pred: Grid, target: Grid, *, use_color: bool = False) -> Non
         print(f" P: {pr}\n T: {tg}\n D: {diff_col}\n")
 
 
+def dump_output(result: dict, path: Path) -> None:
+    """Write result dictionary to ``path`` as JSON or Markdown."""
+    if path.suffix == ".json":
+        with open(path, "w") as fh:
+            json.dump(result, fh, indent=2)
+    elif path.suffix == ".md":
+        lines = [
+            f"# MGEL Debug Output for {result['task_id']}",
+            "## Rules",
+            *[f"- `{r}`" for r in result["rules"]],
+            f"\n**Prediction Score:** {result['prediction_score']:.3f}\n",
+            "## Trace Summary",
+        ]
+        for k, v in result.get("trace_summary", {}).items():
+            lines.append(f"- **{k}**: {v}")
+        lines.extend([
+            "\n## Input Grid",
+            "```",
+            str(result["grid_input"]),
+            "```",
+            "\n## Predicted Grid",
+            "```",
+            str(result["grid_pred"]),
+            "```",
+            "\n## Target Grid",
+            "```",
+            str(result["grid_target"]),
+            "```",
+            "\n## Grid Diff",
+            "```",
+            str(result["grid_diff"]),
+            "```",
+        ])
+        with open(path, "w") as fh:
+            fh.write("\n".join(lines))
+    else:
+        raise ValueError("Unsupported dump file format: use .json or .md")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run MGEL Debug View")
     parser.add_argument("--task_id", type=str, help="Task ID to load (e.g., '5bd6f4ac')")
@@ -69,6 +113,26 @@ def main() -> None:
         type=Path,
         default=Path("arc_solver/tests"),
         help="Directory containing ARC task JSON files",
+    )
+    parser.add_argument(
+        "--manual_input",
+        type=Path,
+        help="Path to JSON file containing an input matrix",
+    )
+    parser.add_argument(
+        "--manual_target",
+        type=Path,
+        help="Path to JSON file containing a target matrix",
+    )
+    parser.add_argument(
+        "--dump_to",
+        type=Path,
+        help="Write evaluation summary to this file (.json or .md)",
+    )
+    parser.add_argument(
+        "--batch_dir",
+        type=Path,
+        help="Directory of tasks for batch evaluation (TODO)",
     )
     parser.add_argument(
         "--color",
@@ -83,7 +147,21 @@ def main() -> None:
     parser.add_argument("--trace", action="store_true", help="Print introspection trace summary")
     args = parser.parse_args()
 
-    if args.task_id:
+    # manual matrix injection overrides task loading
+    if args.manual_input or args.manual_target:
+        if not (args.manual_input and args.manual_target):
+            raise ValueError("Both --manual_input and --manual_target must be provided")
+        try:
+            with open(args.manual_input) as f:
+                input_matrix = json.load(f)
+            with open(args.manual_target) as f:
+                target_matrix = json.load(f)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load manual matrices: {e}")
+        input_grid = Grid(input_matrix)
+        target_grid = Grid(target_matrix)
+        task_id = "MANUAL_INJECTION"
+    elif args.task_id:
         input_grid, target_grid = load_single_task(args.task_id, args.data_dir)
         task_id = args.task_id
     else:
@@ -114,6 +192,9 @@ def main() -> None:
         print("\u274C No symbolic rules extracted.")
         return
 
+    best_result = None
+    best_score = -1.0
+
     for idx, rule_set in enumerate(rule_programs):
         print(f"\nRule Program {idx + 1}:")
         for r in rule_set.rules:
@@ -141,6 +222,7 @@ def main() -> None:
             score = pred_grid.compare_to(target_grid)
             print(f"\u2705 Prediction Score: {score:.3f}")
             print_grid_diff(pred_grid, target_grid, use_color=args.color)
+            metrics = {}
             if args.trace:
                 try:
                     from arc_solver.src.introspection import build_trace, validate_trace
@@ -153,8 +235,31 @@ def main() -> None:
                     )
                 except Exception as ie:
                     print(f"    Trace unavailable: {ie}")
+                    metrics = {}
+
+            diff_grid = [["✓" if a == b else "✗" for a, b in zip(pr, tg)] for pr, tg in zip(pred_grid.data, target_grid.data)]
+            candidate = {
+                "task_id": task_id,
+                "rules": [rule_to_dsl(r) for r in rule_set.rules],
+                "prediction_score": score,
+                "grid_input": input_grid.data,
+                "grid_pred": pred_grid.data,
+                "grid_target": target_grid.data,
+                "trace_summary": metrics if metrics else {},
+                "grid_diff": diff_grid,
+            }
+            if score > best_score:
+                best_result = candidate
+                best_score = score
         except Exception as exc:
             print(f"\u1F6D1 Rule simulation failed with error: {exc}")
+
+    if args.dump_to and best_result:
+        try:
+            dump_output(best_result, args.dump_to)
+            print(f"\u2705 Output dumped to {args.dump_to}")
+        except Exception as de:
+            print(f"\u274C Failed to dump output: {de}")
 
 
 if __name__ == "__main__":
