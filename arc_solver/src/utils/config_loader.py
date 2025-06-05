@@ -51,6 +51,10 @@ STRUCTURAL_ATTENTION_WEIGHT: float = float(META_CONFIG.get("structural_attention
 INTROSPECTION_ENABLED: bool = bool(META_CONFIG.get("introspect", False))
 MEMORY_ENABLED: bool = bool(META_CONFIG.get("use_memory", False))
 LAZY_MEMORY_LOADING: bool = bool(META_CONFIG.get("lazy_memory", False))
+MEMORY_SIMILARITY_THRESHOLD: float = float(
+    META_CONFIG.get("memory_similarity_threshold", 0.95)
+)
+MEMORY_DIAGNOSTICS: bool = bool(META_CONFIG.get("memory_diagnostics", False))
 
 
 def set_offline_mode(value: bool) -> None:
