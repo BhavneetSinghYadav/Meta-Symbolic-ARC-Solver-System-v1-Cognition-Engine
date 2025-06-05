@@ -110,7 +110,7 @@ class Transformation:
         return f"Transformation(ttype={self.ttype}, params={self.params})"
 
 
-@dataclass(frozen=True)
+@dataclass
 class SymbolicRule:
     """Structured rule describing a symbolic transformation."""
 
@@ -119,6 +119,7 @@ class SymbolicRule:
     target: List[Symbol]
     nature: TransformationNature | None = None
     condition: Dict[str, str] = field(default_factory=dict)
+    meta: Dict[str, Any] = field(default_factory=dict)
 
     def __str__(self) -> str:
         left = ", ".join(str(s) for s in self.source)

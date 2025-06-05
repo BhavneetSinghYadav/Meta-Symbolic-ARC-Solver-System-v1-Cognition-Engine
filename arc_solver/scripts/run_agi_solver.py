@@ -203,6 +203,8 @@ def config_sanity_check(args: argparse.Namespace) -> None:
     config_loader.set_prior_threshold(int(args.prior_threshold))
     config_loader.set_use_structural_attention(args.use_structural_attention)
     config_loader.set_attention_weight(args.attention_weight)
+    config_loader.set_sparse_mode(args.sparse_mode)
+    config_loader.set_fallback_on_abstraction_fail(args.fallback_on_abstraction_fail)
     config_loader.set_introspection_enabled(args.introspect)
     config_loader.set_memory_enabled(args.use_memory)
     config_loader.print_runtime_config()
@@ -242,6 +244,12 @@ def main() -> None:
     parser.add_argument("--motif_file", type=str, default=None, help="Motif library YAML")
     parser.add_argument("--use_structural_attention", action="store_true", help="Enable structural attention")
     parser.add_argument("--attention_weight", type=float, default=0.2, help="Structural attention weight")
+    parser.add_argument("--sparse_mode", action="store_true", help="Enable sparse rule ranking")
+    parser.add_argument(
+        "--fallback_on_abstraction_fail",
+        action="store_true",
+        help="Use fallback rules when abstraction fails",
+    )
     parser.add_argument("--regime_override", action="store_true", help="Enable regime override")
     parser.add_argument("--regime_threshold", type=float, default=0.45, help="Override threshold")
     parser.add_argument("--log_traces", action="store_true", help="Save rule traces")

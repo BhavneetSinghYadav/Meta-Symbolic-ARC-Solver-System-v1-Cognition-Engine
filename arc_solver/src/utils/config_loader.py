@@ -51,6 +51,10 @@ STRUCTURAL_ATTENTION_WEIGHT: float = float(META_CONFIG.get("structural_attention
 INTROSPECTION_ENABLED: bool = bool(META_CONFIG.get("introspect", False))
 MEMORY_ENABLED: bool = bool(META_CONFIG.get("use_memory", False))
 LAZY_MEMORY_LOADING: bool = bool(META_CONFIG.get("lazy_memory", False))
+SPARSE_MODE: bool = bool(META_CONFIG.get("sparse_mode", False))
+FALLBACK_ON_ABSTRACTION_FAIL: bool = bool(
+    META_CONFIG.get("fallback_on_abstraction_fail", False)
+)
 
 
 def set_offline_mode(value: bool) -> None:
@@ -127,6 +131,20 @@ def set_memory_enabled(value: bool) -> None:
     global MEMORY_ENABLED
     MEMORY_ENABLED = value
     META_CONFIG["use_memory"] = value
+
+
+def set_sparse_mode(value: bool) -> None:
+    """Enable or disable sparse ranking mode."""
+    global SPARSE_MODE
+    SPARSE_MODE = value
+    META_CONFIG["sparse_mode"] = value
+
+
+def set_fallback_on_abstraction_fail(value: bool) -> None:
+    """Enable or disable fallback rule injection when abstraction fails."""
+    global FALLBACK_ON_ABSTRACTION_FAIL
+    FALLBACK_ON_ABSTRACTION_FAIL = value
+    META_CONFIG["fallback_on_abstraction_fail"] = value
 
 
 def print_runtime_config() -> None:

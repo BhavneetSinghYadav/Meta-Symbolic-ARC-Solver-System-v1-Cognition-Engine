@@ -3,6 +3,17 @@
 from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
+import numpy as np
+try:  # pragma: no cover - optional
+    from scipy.stats import entropy as scipy_entropy
+except Exception:  # pragma: no cover - fallback if scipy unavailable
+    def scipy_entropy(arr):
+        arr = np.asarray(arr, dtype=float)
+        arr = arr[arr > 0]
+        if arr.size == 0:
+            return 0.0
+        p = arr / arr.sum()
+        return float(-(p * np.log(p)).sum())
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import (
@@ -31,6 +42,93 @@ def _heuristic_fallback_rules(inp: Grid, out: Grid) -> List[SymbolicRule]:
             nature=TransformationNature.LOGICAL,
         )
     ]
+
+
+def zone_entropy(zone: np.ndarray) -> float:
+    """Return entropy of color distribution in ``zone``."""
+    return float(scipy_entropy(np.bincount(zone.flatten())))
+
+
+def merge_with_neighbors(overlay: List[List[Optional[Symbol]]], label: str) -> None:
+    """Remove ``label`` from overlay to merge with surrounding cells."""
+    h = len(overlay)
+    w = len(overlay[0]) if h else 0
+    for r in range(h):
+        for c in range(w):
+            sym = overlay[r][c]
+            if sym is not None and sym.value == label:
+                overlay[r][c] = None
+
+
+def align_segments(
+    input_overlay: List[List[Optional[Symbol]]],
+    output_overlay: List[List[Optional[Symbol]]],
+) -> List[List[Optional[Symbol]]]:
+    """Return overlay where zones align across input and output."""
+    h = len(input_overlay)
+    w = len(input_overlay[0]) if h else 0
+    matched: List[List[Optional[Symbol]]] = [
+        [None for _ in range(w)] for _ in range(h)
+    ]
+    for r in range(h):
+        for c in range(w):
+            iz = input_overlay[r][c]
+            oz = output_overlay[r][c] if r < len(output_overlay) and c < len(output_overlay[0]) else None
+            if iz is not None and oz is not None and iz.value == oz.value:
+                matched[r][c] = iz
+    return matched
+
+
+def segment_and_overlay(
+    input_grid: Grid, output_grid: Grid
+) -> Tuple[List[List[Optional[Symbol]]], Dict[str, float]]:
+    """Return IO-aligned zone overlay and entropy map."""
+    inp_overlay = zone_overlay(input_grid)
+    out_overlay = zone_overlay(output_grid)
+    overlay = align_segments(inp_overlay, out_overlay)
+    entropies: Dict[str, float] = {}
+    zones: Dict[str, List[int]] = {}
+    h = len(overlay)
+    w = len(overlay[0]) if h else 0
+    for r in range(h):
+        for c in range(w):
+            sym = overlay[r][c]
+            if sym is None:
+                continue
+            zones.setdefault(sym.value, []).append(input_grid.get(r, c))
+    for label, cells in zones.items():
+        arr = np.array(cells)
+        ent = zone_entropy(arr)
+        entropies[label] = ent
+        if ent < 0.15:
+            merge_with_neighbors(overlay, label)
+    if not any(sym is not None for row in overlay for sym in row):
+        overlay = None
+    return overlay, entropies
+
+
+def generate_fallback_rules(pair: Tuple[Grid, Grid]) -> List[SymbolicRule]:
+    """Return simple fallback rules when extraction fails."""
+    fallback_templates = [
+        SymbolicRule(
+            transformation=Transformation(TransformationType.REPLACE),
+            source=[Symbol(SymbolType.COLOR, "1")],
+            target=[Symbol(SymbolType.COLOR, "2")],
+            nature=TransformationNature.LOGICAL,
+        ),
+        SymbolicRule(
+            transformation=Transformation(
+                TransformationType.TRANSLATE, params={"dx": "1", "dy": "0"}
+            ),
+            source=[Symbol(SymbolType.REGION, "All")],
+            target=[Symbol(SymbolType.REGION, "All")],
+            nature=TransformationNature.SPATIAL,
+        ),
+    ]
+    for r in fallback_templates:
+        r.meta["fallback_reason"] = "no_rule_found"
+    return fallback_templates
+
 from arc_solver.src.segment.segmenter import zone_overlay
 from arc_solver.src.executor.simulator import simulate_rules
 
@@ -43,6 +141,7 @@ def extract_color_change_rules(
     input_grid: Grid,
     output_grid: Grid,
     zone_overlay: Optional[List[List[Symbol]]] = None,
+    zone_entropy_map: Optional[Dict[str, float]] = None,
 ) -> List[SymbolicRule]:
     """Return rules describing consistent color replacements.
 
@@ -73,6 +172,10 @@ def extract_color_change_rules(
                     target=[Symbol(SymbolType.COLOR, str(tgt_color))],
                     nature=TransformationNature.LOGICAL,
                 )
+                rule.meta["derivation"] = {
+                    "heuristic_used": "color_change",
+                    "zone_entropy": None,
+                }
                 rules.append(rule)
         return rules
 
@@ -102,29 +205,38 @@ def extract_color_change_rules(
         # produce unconditional rules when mappings are globally consistent
         for src_color, tgts in global_map.items():
             tgt_color = next(iter(tgts))
-            rules.append(
-                SymbolicRule(
-                    transformation=Transformation(TransformationType.REPLACE),
-                    source=[Symbol(SymbolType.COLOR, str(src_color))],
-                    target=[Symbol(SymbolType.COLOR, str(tgt_color))],
-                    nature=TransformationNature.LOGICAL,
-                )
+            rule = SymbolicRule(
+                transformation=Transformation(TransformationType.REPLACE),
+                source=[Symbol(SymbolType.COLOR, str(src_color))],
+                target=[Symbol(SymbolType.COLOR, str(tgt_color))],
+                nature=TransformationNature.LOGICAL,
             )
+            rule.meta["derivation"] = {
+                "heuristic_used": "color_change",
+                "zone_entropy": None,
+            }
+            rules.append(rule)
         return rules
 
     for zone, mapping in zone_maps.items():
         for src_color, tgts in mapping.items():
             if len(tgts) == 1:
                 tgt_color = next(iter(tgts))
-                rules.append(
-                    SymbolicRule(
-                        transformation=Transformation(TransformationType.REPLACE),
-                        source=[Symbol(SymbolType.COLOR, str(src_color))],
-                        target=[Symbol(SymbolType.COLOR, str(tgt_color))],
-                        nature=TransformationNature.LOGICAL,
-                        condition={"zone": zone},
-                    )
+                rule = SymbolicRule(
+                    transformation=Transformation(TransformationType.REPLACE),
+                    source=[Symbol(SymbolType.COLOR, str(src_color))],
+                    target=[Symbol(SymbolType.COLOR, str(tgt_color))],
+                    nature=TransformationNature.LOGICAL,
+                    condition={"zone": zone},
                 )
+                ent = None
+                if zone_entropy_map is not None:
+                    ent = zone_entropy_map.get(zone)
+                rule.meta["derivation"] = {
+                    "heuristic_used": "color_change",
+                    "zone_entropy": ent,
+                }
+                rules.append(rule)
     return rules
 
 
@@ -215,6 +327,7 @@ def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[Symbo
         target=[Symbol(SymbolType.REGION, "All")],
         nature=TransformationNature.SPATIAL,
     )
+    rule.meta["derivation"] = {"heuristic_used": "translation"}
     return [rule]
 
 
@@ -267,11 +380,11 @@ def abstract(objects, *, logger=None) -> List[SymbolicRule]:
         return []
 
     input_grid, output_grid = objects[0], objects[1]
-    overlay = zone_overlay(input_grid)
+    overlay, zone_info = segment_and_overlay(input_grid, output_grid)
     try:
         rules: List[SymbolicRule] = []
         cc_rules = extract_color_change_rules(
-            input_grid, output_grid, zone_overlay=overlay
+            input_grid, output_grid, zone_overlay=overlay, zone_entropy_map=zone_info
         )
         if logger:
             logger.info(f"color_change_rules: {len(cc_rules)}")
@@ -282,9 +395,9 @@ def abstract(objects, *, logger=None) -> List[SymbolicRule]:
         rules.extend(shape_rules)
         split: List[SymbolicRule] = []
         for r in rules:
-            if r.transformation.ttype in (
-                TransformationType.REPLACE,
-                TransformationType.TRANSLATE,
+            if (
+                r.transformation.ttype in (TransformationType.REPLACE, TransformationType.TRANSLATE)
+                and overlay is not None
             ):
                 split.extend(split_rule_by_overlay(r, input_grid, overlay))
             else:
@@ -297,8 +410,8 @@ def abstract(objects, *, logger=None) -> List[SymbolicRule]:
 
     if not rules or any(not isinstance(r, SymbolicRule) for r in rules):
         if logger:
-            logger.info("using heuristic fallback rules")
-        rules = _heuristic_fallback_rules(input_grid, output_grid)
+            logger.warning("No rules extracted. Triggering fallback generator.")
+        rules = generate_fallback_rules((input_grid, output_grid))
     filtered: List[SymbolicRule] = []
     for rule in rules:
         if hasattr(rule, "is_well_formed") and not rule.is_well_formed():
