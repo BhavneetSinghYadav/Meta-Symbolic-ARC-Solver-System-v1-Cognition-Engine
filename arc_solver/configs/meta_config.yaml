@@ -12,5 +12,7 @@ prior_injection:
   use_motifs: true
   inject_from_memory: true
   fallback_only: false
+introspect: false
+use_memory: false
 use_structural_attention: true
 structural_attention_weight: 0.2

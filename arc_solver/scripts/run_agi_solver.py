@@ -11,6 +11,7 @@ if str(repo_root) not in sys.path:
 
 import argparse
 import json
+import traceback
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -22,6 +23,7 @@ from arc_solver.src.core.grid import Grid
 from arc_solver.src.data.agi_loader import load_agi_tasks, ARCAGITask
 from arc_solver.src.executor.full_pipeline import solve_task as pipeline_solve_task
 from arc_solver.src.executor.simulator import simulate_rules
+from arc_solver.src.executor.fallback_predictor import predict as fallback_predict
 from arc_solver.src.evaluation.metrics import accuracy_score
 from arc_solver.src.evaluation.submission_builder import build_submission_json
 
@@ -180,6 +182,24 @@ def _predict(
     return improved_preds
 
 
+def config_sanity_check(args: argparse.Namespace) -> None:
+    """Apply CLI options to global config and print the runtime settings."""
+    from arc_solver.src.utils import config_loader
+
+    config_loader.set_offline_mode(args.llm_mode == "offline")
+    config_loader.set_repair_enabled(args.allow_self_repair)
+    config_loader.set_repair_threshold(args.repair_threshold)
+    config_loader.set_reflex_override(args.reflex_override)
+    config_loader.set_regime_threshold(args.regime_threshold)
+    config_loader.set_prior_injection(args.use_deep_priors)
+    config_loader.set_prior_threshold(int(args.prior_threshold))
+    config_loader.set_use_structural_attention(args.use_structural_attention)
+    config_loader.set_attention_weight(args.attention_weight)
+    config_loader.set_introspection_enabled(args.introspect)
+    config_loader.set_memory_enabled(args.use_memory)
+    config_loader.print_runtime_config()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the solver on AGI dataset")
     parser.add_argument(
@@ -235,16 +255,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    from arc_solver.src.utils import config_loader
-    config_loader.set_offline_mode(args.llm_mode == "offline")
-    config_loader.set_repair_enabled(args.allow_self_repair)
-    config_loader.set_repair_threshold(args.repair_threshold)
-    config_loader.set_reflex_override(args.reflex_override)
-    config_loader.set_regime_threshold(args.regime_threshold)
-    config_loader.set_prior_injection(args.use_deep_priors)
-    config_loader.set_prior_threshold(int(args.prior_threshold))
-    config_loader.set_use_structural_attention(args.use_structural_attention)
-    config_loader.set_attention_weight(args.attention_weight)
+    from arc_solver.src.memory import preload_memory_from_kaggle_input
+
+    preload_memory_from_kaggle_input()
+    config_sanity_check(args)
 
     split_prefix = {
         "train": "arc-agi_training",
@@ -265,16 +279,21 @@ def main() -> None:
 
     predictions: dict[tuple[str, int], Grid] = {}
     for task in tasks:
-        outputs = _predict(
-            task,
-            introspect=args.introspect,
-            threshold=args.threshold,
-            use_memory=args.use_memory,
-            use_prior=args.use_prior,
-            use_deep_priors=args.use_deep_priors,
-            prior_threshold=args.prior_threshold,
-            motif_file=args.motif_file,
-        )
+        try:
+            outputs = _predict(
+                task,
+                introspect=args.introspect,
+                threshold=args.threshold,
+                use_memory=args.use_memory,
+                use_prior=args.use_prior,
+                use_deep_priors=args.use_deep_priors,
+                prior_threshold=args.prior_threshold,
+                motif_file=args.motif_file,
+            )
+        except Exception as exc:
+            print(f"[ERROR] {task.task_id}: {exc}")
+            traceback.print_exc()
+            outputs = [fallback_predict(g) for g in task.test]
         for i, grid in enumerate(outputs):
             predictions[(task.task_id, i)] = grid
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 """Persistent storage of successful rule programs."""
 
 import json
+import os
+import shutil
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -63,3 +65,14 @@ def retrieve_similar_signatures(
 
 
 __all__ = ["save_rule_program", "load_memory", "retrieve_similar_signatures"]
+
+
+def preload_memory_from_kaggle_input() -> None:
+    """Copy Kaggle dataset memory file into the working directory if present."""
+    src = "/kaggle/input/arc-memory/rule_memory.json"
+    if os.path.exists(src):
+        shutil.copy(src, _DEFAULT_PATH)
+
+
+__all__.append("preload_memory_from_kaggle_input")
+
