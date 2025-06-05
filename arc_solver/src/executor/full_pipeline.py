@@ -59,6 +59,36 @@ def solve_task(
         log_file = f"{log_dir}/{ident}.log"
         logger = get_logger(f"solver.{ident}", file_path=log_file)
 
+    # Regime detection -----------------------------------------------------
+    from arc_solver.src.regime.regime_classifier import (
+        compute_task_signature,
+        predict_regime_category,
+        score_abstraction_likelihood,
+        log_regime,
+        RegimeType,
+    )
+
+    signature_stats = compute_task_signature(train_pairs)
+    regime = predict_regime_category(signature_stats)
+    confidence = score_abstraction_likelihood(signature_stats)
+    if logger:
+        logger.info(
+            f"regime {regime.name} score={confidence:.2f} stats={signature_stats}"
+        )
+    log_regime(task_id or "unknown", signature_stats, regime, confidence)
+
+    if (
+        config_loader.REFLEX_OVERRIDE_ENABLED
+        and confidence < config_loader.REGIME_THRESHOLD
+    ):
+        if logger:
+            logger.info(
+                "reflex override triggered; using %s",
+                config_loader.DEFAULT_OVERRIDE_PATH,
+            )
+        predictions = [fallback_predict(g) for g in test_inputs]
+        return predictions, test_outputs, [], []
+
     rule_sets: List[List] = []
     prior_templates = load_prior_templates()
     simple_fallback = prior_templates[0] if prior_templates else []

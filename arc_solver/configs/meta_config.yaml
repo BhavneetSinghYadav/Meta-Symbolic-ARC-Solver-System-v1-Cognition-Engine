@@ -3,3 +3,7 @@ logging_level: INFO
 llm_mode: offline
 repair_enabled: true
 repair_threshold: 0.7
+reflex_override:
+  enabled: true
+  threshold: 0.45
+  default_path: fallback

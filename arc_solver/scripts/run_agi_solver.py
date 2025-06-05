@@ -200,6 +200,8 @@ def main() -> None:
     )
     parser.add_argument("--use_memory", action="store_true", help="Enable rule memory")
     parser.add_argument("--use_prior", action="store_true", help="Use prior templates")
+    parser.add_argument("--reflex_override", action="store_true", help="Enable regime override")
+    parser.add_argument("--regime_threshold", type=float, default=0.45, help="Override threshold")
     parser.add_argument(
         "--llm_mode",
         choices=["online", "offline"],
@@ -223,6 +225,8 @@ def main() -> None:
     config_loader.set_offline_mode(args.llm_mode == "offline")
     config_loader.set_repair_enabled(args.allow_self_repair)
     config_loader.set_repair_threshold(args.repair_threshold)
+    config_loader.set_reflex_override(args.reflex_override)
+    config_loader.set_regime_threshold(args.regime_threshold)
 
     split_prefix = {
         "train": "arc-agi_training",
