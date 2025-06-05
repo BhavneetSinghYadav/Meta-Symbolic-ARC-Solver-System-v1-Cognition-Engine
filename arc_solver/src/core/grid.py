@@ -22,8 +22,10 @@ class Grid:
                 raise ValueError("All rows must have the same length")
 
     def get(self, row: int, col: int) -> int:
-        """Return the color value at the specified cell."""
-        return self.data[row][col]
+        """Return the color value at the specified cell with bounds checking."""
+        if 0 <= row < len(self.data) and 0 <= col < len(self.data[0]):
+            return self.data[row][col]
+        return None
 
     def set(self, row: int, col: int, value: int) -> None:
         """Set the color value at the specified cell."""

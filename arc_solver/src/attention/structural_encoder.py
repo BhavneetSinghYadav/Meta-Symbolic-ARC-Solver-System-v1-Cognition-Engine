@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+
+def validate_overlay(overlay: List) -> bool:
+    """Return True if ``overlay`` is a 2D list."""
+    return isinstance(overlay, list) and all(isinstance(row, list) for row in overlay)
+
 import numpy as np
 
 
@@ -24,6 +29,9 @@ class StructuralEncoder:
         symbolic_overlay: Optional[List[List[Optional[str]]]] | None = None,
     ) -> np.ndarray:
         """Return deterministic embedding of task structure."""
+
+        if not validate_overlay(zone_overlay):
+            raise ValueError("Invalid overlay structure")
 
         vec = np.zeros(self.dim, dtype=float)
         height = len(zone_overlay)

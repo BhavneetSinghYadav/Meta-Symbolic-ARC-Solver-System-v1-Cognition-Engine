@@ -189,7 +189,7 @@ def config_sanity_check(args: argparse.Namespace) -> None:
     config_loader.set_offline_mode(args.llm_mode == "offline")
     config_loader.set_repair_enabled(args.allow_self_repair)
     config_loader.set_repair_threshold(args.repair_threshold)
-    config_loader.set_reflex_override(args.reflex_override)
+    config_loader.set_reflex_override(args.regime_override)
     config_loader.set_regime_threshold(args.regime_threshold)
     config_loader.set_prior_injection(args.use_deep_priors)
     config_loader.set_prior_threshold(int(args.prior_threshold))
@@ -234,7 +234,7 @@ def main() -> None:
     parser.add_argument("--motif_file", type=str, default=None, help="Motif library YAML")
     parser.add_argument("--use_structural_attention", action="store_true", help="Enable structural attention")
     parser.add_argument("--attention_weight", type=float, default=0.2, help="Structural attention weight")
-    parser.add_argument("--reflex_override", action="store_true", help="Enable regime override")
+    parser.add_argument("--regime_override", action="store_true", help="Enable regime override")
     parser.add_argument("--regime_threshold", type=float, default=0.45, help="Override threshold")
     parser.add_argument(
         "--llm_mode",
