@@ -80,7 +80,7 @@ def visualize_uncertainty(uncertainty_grid: list[list[int]], output_path: str = 
 
 
 def check_symmetry_break(rule: SymbolicRule, grid: Grid, attention_mask: Optional[list[list[bool]]] = None) -> Grid:
-    after = _safe_apply_rule(grid, rule, attention_mask, perform_checks=False)
+    after = safe_apply_rule(rule, grid, attention_mask, perform_checks=False)
     if violates_symmetry(after, grid):
         raise ReflexOverrideException("Symmetry violated by rule")
     if breaks_training_constraint(after):
@@ -151,6 +151,9 @@ def _apply_replace(
     if src_color is None or tgt_color is None:
         return grid
     if not validate_color_range(tgt_color):
+        return grid
+    if not _grid_contains(grid, src_color):
+        logger.warning(f"Source color {src_color} not found; skipping rule")
         return grid
 
     h, w = grid.shape()
@@ -309,6 +312,24 @@ def _apply_functional(
     return grid
 
 
+def safe_apply_rule(
+    rule: SymbolicRule,
+    grid: Grid,
+    attention_mask: Optional[List[List[bool]]] = None,
+    perform_checks: bool = True,
+) -> Grid:
+    """Apply ``rule`` safely, returning ``grid`` unchanged on failure."""
+    logger.debug(f"Executing rule: {rule}")
+    try:
+        return _safe_apply_rule(grid, rule, attention_mask, perform_checks)
+    except IndexError as exc:
+        logger.warning(f"IndexError applying rule {rule}: {exc}")
+        return grid
+    except Exception as exc:  # pragma: no cover - catch-all
+        logger.warning(f"Rule application failed: {rule} — {exc}")
+        return grid
+
+
 def _safe_apply_rule(
     grid: Grid,
     rule: SymbolicRule,
@@ -362,6 +383,10 @@ def simulate_rules(
     write_vals: dict[tuple[int, int], list[int]] = defaultdict(list)
 
     for idx, rule in enumerate(rules):
+        if logger:
+            colors = sorted({v for row in grid.data for v in row})
+            logger.info(f"Applying rule {idx}: {rule}")
+            logger.debug(f"Grid shape={grid.shape()}, colors={colors}")
         if not validate_rule_application(rule, grid):
             if logger:
                 logger.warning(f"Skipping rule due to invalid context: {rule}")
