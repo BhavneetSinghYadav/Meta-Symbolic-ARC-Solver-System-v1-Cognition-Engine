@@ -21,6 +21,7 @@ from arc_solver.src.memory.memory_store import (
 from arc_solver.src.utils.signature_extractor import extract_task_signature
 from arc_solver.src.fallback import prioritize, soft_vote
 from arc_solver.src.executor.prior_templates import load_prior_templates
+from arc_solver.src.executor.fallback_predictor import predict as fallback_predict
 from arc_solver.src.introspection import (
     build_trace,
     inject_feedback,
@@ -45,10 +46,15 @@ def solve_task(
     test_outputs = [Grid(p["output"]) for p in task.get("test", []) if "output" in p]
 
     rule_sets: List[List] = []
+    prior_templates = load_prior_templates()
+    simple_fallback = prior_templates[0] if prior_templates else []
     for inp, out in train_pairs:
-        rules = abstract([inp, out])
-        rules = generalize_rules(rules)
-        rules = select_independent_rules(rules)
+        try:
+            rules = abstract([inp, out])
+            rules = generalize_rules(rules)
+            rules = select_independent_rules(rules)
+        except Exception:
+            rules = simple_fallback
         rule_sets.append(rules)
 
     ranked_rules = probabilistic_rank_rule_sets(rule_sets, train_pairs)
@@ -70,7 +76,10 @@ def solve_task(
             return 0.0
         total = 0.0
         for inp, out in train_pairs:
-            pred = simulate_rules(inp, rules, attention_mask=mask)
+            try:
+                pred = simulate_rules(inp, rules, attention_mask=mask)
+            except Exception:
+                pred = fallback_predict(inp)
             total += pred.compare_to(out)
         return total / len(train_pairs)
 
@@ -97,24 +106,34 @@ def solve_task(
     # Optional introspection/refinement using first training example
     traces = []
     if introspect and best_rules and train_pairs:
-        inp0, out0 = train_pairs[0]
-        pred0 = simulate_rules(inp0, best_rules)
-        trace = build_trace(best_rules[0], inp0, pred0, out0)
-        feedback = inject_feedback(trace)
-        candidates = llm_refine_program(trace, feedback)
-        refined = evaluate_refinements(candidates, inp0, out0)
-        best_rules = [refined]
-        traces.append(trace)
+        try:
+            inp0, out0 = train_pairs[0]
+            pred0 = simulate_rules(inp0, best_rules)
+            trace = build_trace(best_rules[0], inp0, pred0, out0)
+            feedback = inject_feedback(trace)
+            candidates = llm_refine_program(trace, feedback)
+            refined = evaluate_refinements(candidates, inp0, out0)
+            best_rules = [refined]
+            traces.append(trace)
+        except Exception:
+            pass
 
     predictions = []
     top_sets = prioritized[:3] if prioritized else []
     for g in test_inputs:
         cand_preds = []
         for rs in top_sets:
-            cand_preds.append(simulate_rules(g, rs))
-            for m in attn_masks:
-                cand_preds.append(simulate_rules(g, rs, attention_mask=m))
-        cand_preds = cand_preds or [g]
+            try:
+                cand_preds.append(simulate_rules(g, rs))
+                for m in attn_masks:
+                    cand_preds.append(simulate_rules(g, rs, attention_mask=m))
+            except Exception:
+                continue
+        if not cand_preds:
+            try:
+                cand_preds.append(simulate_rules(g, simple_fallback))
+            except Exception:
+                cand_preds.append(fallback_predict(g))
         final = soft_vote(cand_preds)
         predictions.append(final)
 
@@ -137,7 +156,10 @@ def solve_task_iterative(task: dict, *, steps: int = 3, introspect: bool = False
     for pred in preds:
         grid = pred
         for _ in range(1, steps):
-            grid = simulate_symbolic_program(grid, rules)
+            try:
+                grid = simulate_symbolic_program(grid, rules)
+            except Exception:
+                grid = fallback_predict(grid)
         refined_preds.append(grid)
     return refined_preds, outs, traces, rules
 

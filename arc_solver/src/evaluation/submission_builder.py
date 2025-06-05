@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Dict, List
 
+from arc_solver.src.executor.fallback_predictor import predict as fallback_predict
+
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.data.agi_loader import ARCAGITask
 
@@ -13,7 +15,7 @@ def build_submission_json(
 ) -> dict:
     """Return a submission dictionary compatible with the ARC AGI leaderboard."""
 
-    submission: Dict[str, Dict[str, List[List[int]] | List[List[List[int]]]]] = {}
+    submission: Dict[str, Dict[str, List[List[List[int]]]]] = {}
     assert predictions, "Predictions dictionary is empty"
     for task in tasks:
         outputs: List[List[List[int]]] = []
@@ -22,20 +24,20 @@ def build_submission_json(
             if key not in predictions:
                 raise KeyError(f"Missing prediction for {task.task_id} index {i}")
             pred = predictions[key]
-            # Unwrap structures like {"output": grid} returned by some solvers
             if isinstance(pred, dict) and "output" in pred:
                 pred = pred["output"]
+
+            grids: List[List[List[int]]]
             if isinstance(pred, Grid):
-                grid = pred.to_list()
+                grids = [pred.to_list()]
             elif isinstance(pred, list):
-                grid = pred
+                if pred and isinstance(pred[0], list) and pred and isinstance(pred[0][0], int):
+                    grids = [pred]
+                else:
+                    grids = pred  # assume already list of grids
             else:
                 raise TypeError(
                     f"Prediction for {task.task_id} index {i} has invalid type"
-                )
-            if not grid or not isinstance(grid, list) or not isinstance(grid[0], list):
-                raise ValueError(
-                    f"Prediction for {task.task_id} index {i} is malformed: {pred}"
                 )
 
             if task.ground_truth and i < len(task.ground_truth):
@@ -43,20 +45,33 @@ def build_submission_json(
             elif task.train:
                 ref_shape = task.train[0][1].shape()
             else:
-                ref_shape = (len(grid), len(grid[0]))
+                ref_shape = (len(grids[0]), len(grids[0][0]))
 
             h, w = ref_shape
-            if (len(grid), len(grid[0])) != ref_shape:
-                flat = [v for row in grid for v in row]
-                if len(flat) == h * w:
-                    grid = [flat[j * w:(j + 1) * w] for j in range(h)]
-                else:
-                    grid = [[0 for _ in range(w)] for _ in range(h)]
 
-            outputs.append(grid)
-        submission[task.task_id] = {
-            "output": outputs if len(outputs) > 1 else outputs[0]
-        }
+            fixed_grids: List[List[List[int]]] = []
+            for g in grids:
+                if not g or not isinstance(g, list) or not isinstance(g[0], list):
+                    continue
+                if (len(g), len(g[0])) != ref_shape:
+                    flat = [v for row in g for v in row]
+                    if len(flat) == h * w:
+                        g = [flat[j * w:(j + 1) * w] for j in range(h)]
+                    else:
+                        g = [[0 for _ in range(w)] for _ in range(h)]
+                fixed_grids.append(g)
+
+            if not fixed_grids:
+                fixed_grids.append(fallback_predict(Grid([[0]*w for _ in range(h)])).to_list())
+
+            if len(fixed_grids) == 1:
+                fixed_grids.append(fixed_grids[0])
+            if len(fixed_grids) > 2:
+                fixed_grids = fixed_grids[:2]
+
+            outputs.append(fixed_grids)
+
+        submission[task.task_id] = {"output": outputs}
     return submission
 
 __all__ = ["build_submission_json"]
