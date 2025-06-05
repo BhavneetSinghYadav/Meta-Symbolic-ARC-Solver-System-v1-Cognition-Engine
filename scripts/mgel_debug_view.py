@@ -21,7 +21,7 @@ import argparse
 import json
 from pathlib import Path
 
-from arc_solver.src.data.arc_dataset import ARCDataset, load_arc_taskAdd
+from arc_solver.src.data.arc_dataset import ARCDataset, load_arc_task
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.abstractions.abstractor import abstract
 from arc_solver.src.executor.simulator import simulate_rules
