@@ -13,6 +13,24 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationNature,
     TransformationType,
 )
+
+
+def _heuristic_fallback_rules(inp: Grid, out: Grid) -> List[SymbolicRule]:
+    """Return a simple color replacement rule as fallback."""
+    src_counts = inp.count_colors()
+    tgt_counts = out.count_colors()
+    if not src_counts or not tgt_counts:
+        return []
+    src = max(src_counts, key=src_counts.get)
+    tgt = max(tgt_counts, key=tgt_counts.get)
+    return [
+        SymbolicRule(
+            transformation=Transformation(TransformationType.REPLACE),
+            source=[Symbol(SymbolType.COLOR, str(src))],
+            target=[Symbol(SymbolType.COLOR, str(tgt))],
+            nature=TransformationNature.LOGICAL,
+        )
+    ]
 from arc_solver.src.segment.segmenter import zone_overlay
 from arc_solver.src.executor.simulator import simulate_rules
 
@@ -246,23 +264,30 @@ def abstract(objects) -> List[SymbolicRule]:
 
     input_grid, output_grid = objects[0], objects[1]
     overlay = zone_overlay(input_grid)
-    rules: List[SymbolicRule] = []
-    rules.extend(
-        extract_color_change_rules(
-            input_grid, output_grid, zone_overlay=overlay
+    try:
+        rules: List[SymbolicRule] = []
+        rules.extend(
+            extract_color_change_rules(
+                input_grid, output_grid, zone_overlay=overlay
+            )
         )
-    )
-    rules.extend(extract_shape_based_rules(input_grid, output_grid))
-    split: List[SymbolicRule] = []
-    for r in rules:
-        if r.transformation.ttype in (
-            TransformationType.REPLACE,
-            TransformationType.TRANSLATE,
-        ):
-            split.extend(split_rule_by_overlay(r, input_grid, overlay))
-        else:
-            split.append(r)
-    return split
+        rules.extend(extract_shape_based_rules(input_grid, output_grid))
+        split: List[SymbolicRule] = []
+        for r in rules:
+            if r.transformation.ttype in (
+                TransformationType.REPLACE,
+                TransformationType.TRANSLATE,
+            ):
+                split.extend(split_rule_by_overlay(r, input_grid, overlay))
+            else:
+                split.append(r)
+        rules = split
+    except Exception:
+        rules = []
+
+    if not rules or any(not isinstance(r, SymbolicRule) for r in rules):
+        rules = _heuristic_fallback_rules(input_grid, output_grid)
+    return rules
 
 
 __all__ = [
