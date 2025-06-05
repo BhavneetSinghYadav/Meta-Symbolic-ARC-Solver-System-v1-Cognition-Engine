@@ -107,6 +107,16 @@ class SymbolicRule:
             f"nature={self.nature!r}, condition={self.condition!r})"
         )
 
+    def is_well_formed(self) -> bool:
+        """Return True if color tokens contain valid integer values."""
+        try:
+            for sym in self.source + self.target:
+                if sym.type is SymbolType.COLOR:
+                    int(sym.value)
+        except ValueError:
+            return False
+        return True
+
 
 __all__ = [
     "SymbolType",

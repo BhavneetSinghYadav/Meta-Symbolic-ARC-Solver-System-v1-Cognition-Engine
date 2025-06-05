@@ -70,11 +70,19 @@ def _apply_replace(
     tgt_color = None
     for sym in rule.source:
         if sym.type is SymbolType.COLOR:
-            src_color = int(sym.value)
+            try:
+                src_color = int(sym.value)
+            except ValueError:
+                logger.warning(f"Invalid symbol value: {sym.value}, skipping rule")
+                return grid
             break
     for sym in rule.target:
         if sym.type is SymbolType.COLOR:
-            tgt_color = int(sym.value)
+            try:
+                tgt_color = int(sym.value)
+            except ValueError:
+                logger.warning(f"Invalid symbol value: {sym.value}, skipping rule")
+                return grid
             break
     if src_color is None or tgt_color is None:
         return grid
@@ -233,7 +241,11 @@ def _safe_apply_rule(
     before = Grid([row[:] for row in grid.data])
 
     if rule.transformation.ttype is TransformationType.REPLACE:
-        after = _apply_replace(grid, rule, attention_mask)
+        try:
+            after = _apply_replace(grid, rule, attention_mask)
+        except Exception as e:
+            logger.warning(f"Rule application failed: {rule} — {e}")
+            return grid
     elif rule.transformation.ttype is TransformationType.TRANSLATE:
         after = _apply_translate(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.CONDITIONAL:
@@ -270,6 +282,10 @@ def simulate_rules(
         except ReflexOverrideException as e:
             if logger:
                 logger.warning(f"Reflex override triggered: {e}")
+            continue
+        except Exception as e:
+            if logger:
+                logger.warning(f"Rule application failed: {rule} — {e}")
             continue
     return grid
 

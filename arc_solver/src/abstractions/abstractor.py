@@ -299,7 +299,12 @@ def abstract(objects, *, logger=None) -> List[SymbolicRule]:
         if logger:
             logger.info("using heuristic fallback rules")
         rules = _heuristic_fallback_rules(input_grid, output_grid)
-    return rules
+    filtered: List[SymbolicRule] = []
+    for rule in rules:
+        if hasattr(rule, "is_well_formed") and not rule.is_well_formed():
+            continue
+        filtered.append(rule)
+    return filtered
 
 
 __all__ = [
