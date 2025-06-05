@@ -252,6 +252,7 @@ def main() -> None:
     )
     parser.add_argument("--regime_override", action="store_true", help="Enable regime override")
     parser.add_argument("--regime_threshold", type=float, default=0.45, help="Override threshold")
+    parser.add_argument("--log_regime_audit", action="store_true", help="Log regime audit corrections")
     parser.add_argument("--log_traces", action="store_true", help="Save rule traces")
     parser.add_argument(
         "--debug_memory", action="store_true", help="Print memory match diagnostics"

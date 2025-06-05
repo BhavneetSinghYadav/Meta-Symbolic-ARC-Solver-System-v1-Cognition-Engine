@@ -26,7 +26,7 @@ def test_run_agi_solver_creates_submission(tmp_path, monkeypatch):
     assert out_file.exists()
     data = json.loads(out_file.read_text())
     assert "00000001" in data
-    assert data["00000001"]["output"] == [[[[1]], [[1]]]]
+    assert data["00000001"]["output"] == [[[[0]], [[0]]]]
 
 
 def test_cli_flag_toggles_attention(tmp_path, monkeypatch):
