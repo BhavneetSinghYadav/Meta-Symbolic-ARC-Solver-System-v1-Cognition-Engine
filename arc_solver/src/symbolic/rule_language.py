@@ -18,7 +18,6 @@ from .vocabulary import (
     Transformation,
     TransformationNature,
     TransformationType,
-    validate_color_range,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +30,20 @@ DSL_GRAMMAR = {
 }
 
 MAX_SYMBOL_VALUE = 10
+
+
+def validate_color_range(color: int | str) -> bool:
+    """Return ``True`` if ``color`` is a valid ARC color index (0-9)."""
+
+    try:
+        value = int(color)
+    except Exception:
+        logger.warning(f"Invalid color token: {color}")
+        return False
+    if 0 <= value < MAX_SYMBOL_VALUE:
+        return True
+    logger.warning(f"Color value out of range: {value}")
+    return False
 
 
 def clean_dsl_string(s: str) -> str:
@@ -123,5 +136,6 @@ __all__ = [
     "parse_rule",
     "rule_to_dsl",
     "validate_dsl_program",
+    "validate_color_range",
     "clean_dsl_string",
 ]
