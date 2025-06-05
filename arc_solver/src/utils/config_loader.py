@@ -31,9 +31,23 @@ def load_meta_config(path: Optional[Path] = None) -> Dict[str, Any]:
 
 META_CONFIG: Dict[str, Any] = load_meta_config()
 OFFLINE_MODE: bool = META_CONFIG.get("llm_mode", "online") == "offline"
+REPAIR_ENABLED: bool = META_CONFIG.get("repair_enabled", False)
+REPAIR_THRESHOLD: float = float(META_CONFIG.get("repair_threshold", 0.7))
 
 
 def set_offline_mode(value: bool) -> None:
     """Override offline mode at runtime."""
     global OFFLINE_MODE
     OFFLINE_MODE = value
+
+
+def set_repair_enabled(value: bool) -> None:
+    """Override repair loop enabled flag at runtime."""
+    global REPAIR_ENABLED
+    REPAIR_ENABLED = value
+
+
+def set_repair_threshold(value: float) -> None:
+    """Override repair loop threshold at runtime."""
+    global REPAIR_THRESHOLD
+    REPAIR_THRESHOLD = value

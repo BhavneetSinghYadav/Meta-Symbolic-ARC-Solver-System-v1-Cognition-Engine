@@ -18,6 +18,7 @@ from .self_repair import (
     refine_rule,
     llm_suggest_rule_fix,
     evaluate_repair_candidates,
+    run_meta_repair,
     RuleTraceEntry,
     FaultHypothesis,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "refine_rule",
     "llm_suggest_rule_fix",
     "evaluate_repair_candidates",
+    "run_meta_repair",
     "RuleTraceEntry",
     "FaultHypothesis",
 ]
