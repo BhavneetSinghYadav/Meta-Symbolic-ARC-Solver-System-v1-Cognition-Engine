@@ -38,6 +38,13 @@ REFLEX_OVERRIDE_ENABLED: bool = bool(_REFLEX_CONF.get("enabled", False))
 REGIME_THRESHOLD: float = float(_REFLEX_CONF.get("threshold", 0.45))
 DEFAULT_OVERRIDE_PATH: str = str(_REFLEX_CONF.get("default_path", "fallback"))
 
+_PRIOR_CONF = META_CONFIG.get("prior_injection", {})
+PRIOR_INJECTION_ENABLED: bool = bool(_PRIOR_CONF.get("enabled", False))
+PRIOR_USE_MOTIFS: bool = bool(_PRIOR_CONF.get("use_motifs", False))
+PRIOR_FROM_MEMORY: bool = bool(_PRIOR_CONF.get("inject_from_memory", False))
+PRIOR_FALLBACK_ONLY: bool = bool(_PRIOR_CONF.get("fallback_only", False))
+PRIOR_MAX_INJECT: int = int(_PRIOR_CONF.get("max_inject", 3))
+
 
 def set_offline_mode(value: bool) -> None:
     """Override offline mode at runtime."""
@@ -67,3 +74,15 @@ def set_regime_threshold(value: float) -> None:
     """Override regime routing threshold."""
     global REGIME_THRESHOLD
     REGIME_THRESHOLD = value
+
+
+def set_prior_injection(value: bool) -> None:
+    """Enable or disable deep prior injection."""
+    global PRIOR_INJECTION_ENABLED
+    PRIOR_INJECTION_ENABLED = value
+
+
+def set_prior_threshold(value: int) -> None:
+    """Override number of max injected priors."""
+    global PRIOR_MAX_INJECT
+    PRIOR_MAX_INJECT = value

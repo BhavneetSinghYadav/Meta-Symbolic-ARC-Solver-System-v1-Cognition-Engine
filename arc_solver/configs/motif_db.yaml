@@ -1,0 +1,45 @@
+- name: replace_black_to_white
+  type: color_replace
+  rule_dsl: "REPLACE [COLOR=0] -> [COLOR=1]"
+  abstract_tag: color_shift
+  frequency: 87
+- name: replace_white_to_black
+  type: color_replace
+  rule_dsl: "REPLACE [COLOR=1] -> [COLOR=0]"
+  abstract_tag: color_shift
+  frequency: 65
+- name: mirror_fill_left
+  type: symmetry_fill
+  rule_dsl: "FILL_LEFT [MASK=symmetry] FROM [ZONE=right]"
+  abstract_tag: mirror_fill
+  frequency: 51
+- name: mirror_fill_right
+  type: symmetry_fill
+  rule_dsl: "FILL_RIGHT [MASK=symmetry] FROM [ZONE=left]"
+  abstract_tag: mirror_fill
+  frequency: 50
+- name: translate_up
+  type: spatial
+  rule_dsl: "TRANSLATE [ZONE=any] (0,-1)"
+  abstract_tag: translation
+  frequency: 42
+- name: translate_down
+  type: spatial
+  rule_dsl: "TRANSLATE [ZONE=any] (0,1)"
+  abstract_tag: translation
+  frequency: 40
+- name: flood_fill
+  type: flood
+  rule_dsl: "FLOOD_FILL [COLOR=X]"
+  abstract_tag: fill
+  frequency: 30
+- name: xor_overlay
+  type: logical
+  rule_dsl: "XOR [MASK=A] WITH [MASK=B]"
+  abstract_tag: boolean
+  frequency: 20
+- name: rotate_90
+  type: rotation
+  rule_dsl: "ROTATE [ANGLE=90]"
+  abstract_tag: rotation
+  frequency: 10
