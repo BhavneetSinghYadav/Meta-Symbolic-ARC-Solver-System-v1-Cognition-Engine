@@ -48,56 +48,97 @@ PRIOR_MAX_INJECT: int = int(_PRIOR_CONF.get("max_inject", 3))
 USE_STRUCTURAL_ATTENTION: bool = bool(META_CONFIG.get("use_structural_attention", False))
 STRUCTURAL_ATTENTION_WEIGHT: float = float(META_CONFIG.get("structural_attention_weight", 0.2))
 
+INTROSPECTION_ENABLED: bool = bool(META_CONFIG.get("introspect", False))
+MEMORY_ENABLED: bool = bool(META_CONFIG.get("use_memory", False))
+
 
 def set_offline_mode(value: bool) -> None:
     """Override offline mode at runtime."""
     global OFFLINE_MODE
     OFFLINE_MODE = value
+    META_CONFIG["llm_mode"] = "offline" if value else "online"
 
 
 def set_repair_enabled(value: bool) -> None:
     """Override repair loop enabled flag at runtime."""
     global REPAIR_ENABLED
     REPAIR_ENABLED = value
+    META_CONFIG["repair_enabled"] = value
 
 
 def set_repair_threshold(value: float) -> None:
     """Override repair loop threshold at runtime."""
     global REPAIR_THRESHOLD
     REPAIR_THRESHOLD = value
+    META_CONFIG["repair_threshold"] = value
 
 
 def set_reflex_override(value: bool) -> None:
     """Enable or disable reflex override logic."""
     global REFLEX_OVERRIDE_ENABLED
     REFLEX_OVERRIDE_ENABLED = value
+    META_CONFIG.setdefault("reflex_override", {})["enabled"] = value
 
 
 def set_regime_threshold(value: float) -> None:
     """Override regime routing threshold."""
     global REGIME_THRESHOLD
     REGIME_THRESHOLD = value
+    META_CONFIG.setdefault("reflex_override", {})["threshold"] = value
 
 
 def set_prior_injection(value: bool) -> None:
     """Enable or disable deep prior injection."""
     global PRIOR_INJECTION_ENABLED
     PRIOR_INJECTION_ENABLED = value
+    META_CONFIG.setdefault("prior_injection", {})["enabled"] = value
 
 
 def set_prior_threshold(value: int) -> None:
     """Override number of max injected priors."""
     global PRIOR_MAX_INJECT
     PRIOR_MAX_INJECT = value
+    META_CONFIG.setdefault("prior_injection", {})["max_inject"] = value
 
 
 def set_use_structural_attention(value: bool) -> None:
     """Enable or disable structural attention."""
     global USE_STRUCTURAL_ATTENTION
     USE_STRUCTURAL_ATTENTION = value
+    META_CONFIG["use_structural_attention"] = value
 
 
 def set_attention_weight(value: float) -> None:
     """Override structural attention weight."""
     global STRUCTURAL_ATTENTION_WEIGHT
     STRUCTURAL_ATTENTION_WEIGHT = value
+    META_CONFIG["structural_attention_weight"] = value
+
+def set_introspection_enabled(value: bool) -> None:
+    """Enable or disable pipeline introspection."""
+    global INTROSPECTION_ENABLED
+    INTROSPECTION_ENABLED = value
+    META_CONFIG["introspect"] = value
+
+
+def set_memory_enabled(value: bool) -> None:
+    """Enable or disable rule memory usage."""
+    global MEMORY_ENABLED
+    MEMORY_ENABLED = value
+    META_CONFIG["use_memory"] = value
+
+
+def print_runtime_config() -> None:
+    """Print a summary of the current runtime configuration."""
+    info = {
+        "introspect": INTROSPECTION_ENABLED,
+        "llm_mode": "offline" if OFFLINE_MODE else "online",
+        "use_memory": MEMORY_ENABLED,
+        "self_repair": REPAIR_ENABLED,
+        "regime_override": REFLEX_OVERRIDE_ENABLED,
+        "use_structural_attention": USE_STRUCTURAL_ATTENTION,
+    }
+    print("Runtime configuration:")
+    for k, v in info.items():
+        print(f"  {k}: {v}")
+

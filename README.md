@@ -61,3 +61,12 @@ The packages depend on each other as follows:
 
 For a complete overview of the processing pipeline, see the [architecture document](docs/architecture.md).
 
+## Kaggle Usage
+
+When running inside Kaggle notebooks the workspace is read-only. To persist the
+rule memory between sessions, place `rule_memory.json` in a dataset named
+`arc-memory` and mount it under `/kaggle/input/arc-memory/`. Calling
+`preload_memory_from_kaggle_input()` will copy the file into the working
+directory so the solver can update it.
+
+
