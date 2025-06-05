@@ -45,6 +45,9 @@ PRIOR_FROM_MEMORY: bool = bool(_PRIOR_CONF.get("inject_from_memory", False))
 PRIOR_FALLBACK_ONLY: bool = bool(_PRIOR_CONF.get("fallback_only", False))
 PRIOR_MAX_INJECT: int = int(_PRIOR_CONF.get("max_inject", 3))
 
+USE_STRUCTURAL_ATTENTION: bool = bool(META_CONFIG.get("use_structural_attention", False))
+STRUCTURAL_ATTENTION_WEIGHT: float = float(META_CONFIG.get("structural_attention_weight", 0.2))
+
 
 def set_offline_mode(value: bool) -> None:
     """Override offline mode at runtime."""
@@ -86,3 +89,15 @@ def set_prior_threshold(value: int) -> None:
     """Override number of max injected priors."""
     global PRIOR_MAX_INJECT
     PRIOR_MAX_INJECT = value
+
+
+def set_use_structural_attention(value: bool) -> None:
+    """Enable or disable structural attention."""
+    global USE_STRUCTURAL_ATTENTION
+    USE_STRUCTURAL_ATTENTION = value
+
+
+def set_attention_weight(value: float) -> None:
+    """Override structural attention weight."""
+    global STRUCTURAL_ATTENTION_WEIGHT
+    STRUCTURAL_ATTENTION_WEIGHT = value

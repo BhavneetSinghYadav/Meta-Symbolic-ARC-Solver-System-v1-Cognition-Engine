@@ -212,6 +212,8 @@ def main() -> None:
     parser.add_argument("--use_deep_priors", action="store_true", help="Enable deep prior injection")
     parser.add_argument("--prior_threshold", type=float, default=0.4, help="Signature similarity threshold")
     parser.add_argument("--motif_file", type=str, default=None, help="Motif library YAML")
+    parser.add_argument("--use_structural_attention", action="store_true", help="Enable structural attention")
+    parser.add_argument("--attention_weight", type=float, default=0.2, help="Structural attention weight")
     parser.add_argument("--reflex_override", action="store_true", help="Enable regime override")
     parser.add_argument("--regime_threshold", type=float, default=0.45, help="Override threshold")
     parser.add_argument(
@@ -241,6 +243,8 @@ def main() -> None:
     config_loader.set_regime_threshold(args.regime_threshold)
     config_loader.set_prior_injection(args.use_deep_priors)
     config_loader.set_prior_threshold(int(args.prior_threshold))
+    config_loader.set_use_structural_attention(args.use_structural_attention)
+    config_loader.set_attention_weight(args.attention_weight)
 
     split_prefix = {
         "train": "arc-agi_training",
