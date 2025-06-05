@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import Symbol, SymbolType, SymbolicRule
 from arc_solver.src.segment.segmenter import zone_overlay
+import logging
 
 
 @dataclass
@@ -32,6 +33,7 @@ def build_trace(
 ) -> RuleTrace:
     """Return a :class:`RuleTrace` describing ``rule``'s effect."""
 
+    logger = logging.getLogger("trace_builder")
     height, width = grid_in.shape()
 
     affected: List[Tuple[int, int]] = []
@@ -39,6 +41,7 @@ def build_trace(
         for c in range(width):
             if grid_in.get(r, c) != grid_out.get(r, c):
                 affected.append((r, c))
+                logger.debug("cell %d,%d changed from %s to %s", r, c, grid_in.get(r, c), grid_out.get(r, c))
 
     if grid_true is not None and grid_true.shape() == grid_out.shape():
         delta_mask = [
@@ -72,6 +75,7 @@ def build_trace(
                     zones.add(s.value)
                 elif s.type is SymbolType.REGION:
                     regions.add(s.value)
+            logger.debug("trace cell %d,%d labels=%s", r, c, [str(s) for s in syms])
         if zones:
             context["zones"] = sorted(zones)
         if regions:

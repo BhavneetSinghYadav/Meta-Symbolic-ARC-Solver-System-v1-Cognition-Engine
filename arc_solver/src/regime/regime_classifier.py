@@ -6,6 +6,7 @@ from enum import Enum, auto
 from pathlib import Path
 import csv
 import math
+import logging
 from typing import Dict, List, Tuple
 
 from arc_solver.src.core.grid import Grid
@@ -36,33 +37,80 @@ def _grid_entropy(grid: Grid) -> float:
     return ent
 
 
-def compute_task_signature(train_pairs: List[Tuple[Grid, Grid]]) -> Dict[str, float]:
-    """Return simple statistics summarising the training examples."""
+def compute_task_signature(
+    train_pairs: List[Tuple[Grid, Grid]],
+    *,
+    logger: logging.Logger | None = None,
+) -> Dict[str, float]:
+    """Return simple statistics summarising the training examples.
+
+    Any malformed or misaligned pairs are skipped with a warning.
+    """
     if not train_pairs:
         return {}
+
     sizes: List[int] = []
     entropies: List[float] = []
     diffs: List[float] = []
     symmetry = 0
     colors = set()
-    for inp, out in train_pairs:
-        h, w = inp.shape()
-        sizes.append(h * w)
-        entropies.append(_grid_entropy(inp))
-        entropies.append(_grid_entropy(out))
-        if inp.data == inp.flip_horizontal().data or inp.data == inp.flip_horizontal().flip_horizontal().data:
-            symmetry += 1
-        colors.update(inp.count_colors().keys())
-        colors.update(out.count_colors().keys())
-        diff = sum(
-            1 for r in range(h) for c in range(w) if inp.get(r, c) != out.get(r, c)
-        )
-        diffs.append(diff / (h * w))
+
+    for idx, (inp, out) in enumerate(train_pairs):
+        try:
+            if inp is None or out is None:
+                raise ValueError("pair contains None")
+            if inp.shape() != out.shape():
+                if logger:
+                    logger.warning(
+                        "pair %d shape mismatch %s vs %s, skipping",
+                        idx,
+                        inp.shape(),
+                        out.shape(),
+                    )
+                continue
+            h, w = inp.shape()
+            if h == 0 or w == 0:
+                if logger:
+                    logger.warning("pair %d has empty grid, skipping", idx)
+                continue
+            sizes.append(h * w)
+            try:
+                entropies.append(_grid_entropy(inp))
+                entropies.append(_grid_entropy(out))
+            except Exception as exc:  # pragma: no cover - safety
+                if logger:
+                    logger.warning("entropy failed for pair %d: %s", idx, exc)
+                entropies.append(0.0)
+                entropies.append(0.0)
+            if inp.data == inp.flip_horizontal().data or inp.data == inp.flip_horizontal().flip_horizontal().data:
+                symmetry += 1
+            colors.update(inp.count_colors().keys())
+            colors.update(out.count_colors().keys())
+            try:
+                diff = sum(
+                    1
+                    for r in range(h)
+                    for c in range(w)
+                    if inp.get(r, c) != out.get(r, c)
+                )
+                diffs.append(diff / (h * w))
+            except Exception as exc:  # pragma: no cover - safety
+                if logger:
+                    logger.warning("diff failed for pair %d: %s", idx, exc)
+                diffs.append(0.0)
+        except Exception as exc:  # pragma: no cover - safety
+            if logger:
+                logger.warning("error processing pair %d: %s", idx, exc)
+            continue
+
+    if not sizes:
+        return {}
+
     return {
         "avg_size": sum(sizes) / len(sizes),
-        "avg_entropy": sum(entropies) / len(entropies),
+        "avg_entropy": sum(entropies) / len(entropies) if entropies else 0.0,
         "symmetry_ratio": symmetry / len(train_pairs),
-        "avg_diff": sum(diffs) / len(diffs),
+        "avg_diff": sum(diffs) / len(diffs) if diffs else 0.0,
         "num_colors": len(colors),
     }
 

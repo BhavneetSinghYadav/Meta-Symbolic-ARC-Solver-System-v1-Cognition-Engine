@@ -106,6 +106,7 @@ def _predict(
     use_deep_priors: bool = False,
     prior_threshold: float = 0.4,
     motif_file: str | None = None,
+    log_traces: bool = False,
 ):
     """Return predictions for ``task`` optionally refining with introspection."""
 
@@ -115,9 +116,9 @@ def _predict(
     test_dicts = [{"input": g.data} for g in task.test]
     json_task = {"train": train_dicts, "test": test_dicts}
 
-    preds, _, _, rules = pipeline_solve_task(
+    preds, _, traces, rules = pipeline_solve_task(
         json_task,
-        introspect=False,
+        introspect=log_traces,
         use_memory=use_memory,
         use_prior=use_prior,
         use_deep_priors=use_deep_priors,
@@ -138,6 +139,11 @@ def _predict(
         return out
 
     norm_preds = _normalize(preds)
+    if log_traces and traces:
+        Path("logs/traces").mkdir(exist_ok=True)
+        with open(f"logs/traces/{task.task_id}.txt", "w", encoding="utf-8") as f:
+            for t in traces:
+                f.write(str(t) + "\n")
 
     if introspect and task.train:
         score = sum(
@@ -236,6 +242,7 @@ def main() -> None:
     parser.add_argument("--attention_weight", type=float, default=0.2, help="Structural attention weight")
     parser.add_argument("--regime_override", action="store_true", help="Enable regime override")
     parser.add_argument("--regime_threshold", type=float, default=0.45, help="Override threshold")
+    parser.add_argument("--log_traces", action="store_true", help="Save rule traces")
     parser.add_argument(
         "--llm_mode",
         choices=["online", "offline"],
@@ -289,6 +296,7 @@ def main() -> None:
                 use_deep_priors=args.use_deep_priors,
                 prior_threshold=args.prior_threshold,
                 motif_file=args.motif_file,
+                log_traces=args.log_traces,
             )
         except Exception as exc:
             print(f"[ERROR] {task.task_id}: {exc}")

@@ -3,6 +3,7 @@ from __future__ import annotations
 """Utilities for building ARC AGI competition submission files."""
 
 from typing import Dict, List
+import logging
 
 from arc_solver.src.executor.fallback_predictor import predict as fallback_predict
 
@@ -16,6 +17,7 @@ def build_submission_json(
     """Return a submission dictionary compatible with the ARC AGI leaderboard."""
 
     submission: Dict[str, Dict[str, List[List[List[int]]]]] = {}
+    logger = logging.getLogger("submission_builder")
     assert predictions, "Predictions dictionary is empty"
     for task in tasks:
         outputs: List[List[List[int]]] = []
@@ -53,6 +55,10 @@ def build_submission_json(
             for g in grids:
                 if not g or not isinstance(g, list) or not isinstance(g[0], list):
                     continue
+                if not all(isinstance(v, int) for row in g for v in row):
+                    if logger:
+                        logger.warning("non-int values corrected in %s[%d]", task.task_id, i)
+                    g = [[int(v) if isinstance(v, int) else 0 for v in row] for row in g]
                 if (len(g), len(g[0])) != ref_shape:
                     flat = [v for row in g for v in row]
                     if len(flat) == h * w:
@@ -62,6 +68,8 @@ def build_submission_json(
                 fixed_grids.append(g)
 
             if not fixed_grids:
+                if logger:
+                    logger.warning("prediction for %s[%d] was empty; using fallback", task.task_id, i)
                 fixed_grids.append(fallback_predict(Grid([[0]*w for _ in range(h)])).to_list())
 
             if len(fixed_grids) == 1:
