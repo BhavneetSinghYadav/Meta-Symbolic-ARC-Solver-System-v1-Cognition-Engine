@@ -3,8 +3,7 @@
 This script loads a single ARC task, extracts symbolic rules using the
 ``abstract`` function, and then applies each rule while printing a detailed
 trace.  It can load a task by ``task_id`` from a directory of ARC JSON files
-or use manually injected matrices.  Optional ``--color`` and ``--step`` flags
-enable coloured grid output and step-by-step rule execution.
+or use manually injected matrices.  Optional ``--color`` and ``--step_by_step`` flags enable coloured grid output and step-by-step rule execution. ``--trace`` prints introspection summaries.
 
 Usage::
 
@@ -48,6 +47,20 @@ def print_grid(label: str, grid: Grid, *, use_color: bool = False) -> None:
             print(" ", row)
 
 
+def print_grid_diff(pred: Grid, target: Grid, *, use_color: bool = False) -> None:
+    """Print row-wise diff between ``pred`` and ``target`` grids."""
+    print("\n🔍 Prediction vs Target Diff:")
+    for pr, tg in zip(pred.data, target.data):
+        diff_row = ["✓" if a == b else "✗" for a, b in zip(pr, tg)]
+        if use_color:
+            diff_col = " ".join(
+                "\033[92m✓\033[0m" if d == "✓" else "\033[91m✗\033[0m" for d in diff_row
+            )
+        else:
+            diff_col = " ".join(diff_row)
+        print(f" P: {pr}\n T: {tg}\n D: {diff_col}\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run MGEL Debug View")
     parser.add_argument("--task_id", type=str, help="Task ID to load (e.g., '5bd6f4ac')")
@@ -63,10 +76,11 @@ def main() -> None:
         help="Print grids using ANSI color codes",
     )
     parser.add_argument(
-        "--step",
+        "--step_by_step",
         action="store_true",
         help="Apply rules one by one with intermediate grids",
     )
+    parser.add_argument("--trace", action="store_true", help="Print introspection trace summary")
     args = parser.parse_args()
 
     if args.task_id:
@@ -105,7 +119,7 @@ def main() -> None:
         for r in rule_set.rules:
             print(" \u25AA", rule_to_dsl(r))
 
-        if args.step:
+        if args.step_by_step:
             working_grid = Grid([row[:] for row in input_grid.data])
             for rule in rule_set.rules:
                 dsl = rule_to_dsl(rule)
@@ -126,9 +140,19 @@ def main() -> None:
             print_grid("Predicted Grid", pred_grid, use_color=args.color)
             score = pred_grid.compare_to(target_grid)
             print(f"\u2705 Prediction Score: {score:.3f}")
-            for i, (row_pred, row_target) in enumerate(zip(pred_grid.data, target_grid.data)):
-                diff = ["\u2713" if a == b else "\u2717" for a, b in zip(row_pred, row_target)]
-                print(f"    Row {i}: Pred = {row_pred}, Target = {row_target}, Diff = {diff}")
+            print_grid_diff(pred_grid, target_grid, use_color=args.color)
+            if args.trace:
+                try:
+                    from arc_solver.src.introspection import build_trace, validate_trace
+                    trace = build_trace(rule_set.rules[0], input_grid, pred_grid, target_grid)
+                    metrics = validate_trace(trace)
+                    print(
+                        " Trace Summary:",
+                        f"coverage={metrics['coverage_score']:.2f},",
+                        f"conflicts={metrics['conflict_flags']}",
+                    )
+                except Exception as ie:
+                    print(f"    Trace unavailable: {ie}")
         except Exception as exc:
             print(f"\u1F6D1 Rule simulation failed with error: {exc}")
 
