@@ -15,6 +15,8 @@ from .vocabulary import (
 
 
 def _parse_symbol(token: str) -> Symbol:
+    if "=" not in token:
+        raise ValueError(f"Invalid symbol token: {token}")
     key, value = token.split("=", 1)
     key = key.strip().upper()
     value = value.strip()

@@ -15,6 +15,7 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationType,
 )
 from arc_solver.src.segment.segmenter import zone_overlay
+from arc_solver.src.utils.grid_utils import validate_grid
 
 
 logger = get_logger(__name__)
@@ -141,13 +142,21 @@ def _apply_conditional(
     neighbor_color = rule.transformation.params.get("neighbor")
     for sym in rule.source:
         if sym.type is SymbolType.COLOR:
-            src_color = int(sym.value)
+            try:
+                src_color = int(sym.value)
+            except Exception:
+                logger.warning(f"Invalid symbol value: {sym.value}, skipping rule")
+                return grid
         elif sym.type is SymbolType.ZONE:
             # zone scoping is handled in _apply_region
             pass
     for sym in rule.target:
         if sym.type is SymbolType.COLOR:
-            tgt_color = int(sym.value)
+            try:
+                tgt_color = int(sym.value)
+            except Exception:
+                logger.warning(f"Invalid symbol value: {sym.value}, skipping rule")
+                return grid
     if src_color is None or tgt_color is None:
         return grid
 
@@ -287,6 +296,10 @@ def simulate_rules(
             if logger:
                 logger.warning(f"Rule application failed: {rule} — {e}")
             continue
+    if not validate_grid(grid, expected_shape=input_grid.shape()):
+        if logger:
+            logger.warning("simulation produced invalid grid; returning copy")
+        grid = Grid([row[:] for row in input_grid.data])
     return grid
 
 

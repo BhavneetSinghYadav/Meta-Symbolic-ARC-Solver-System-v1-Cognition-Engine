@@ -126,6 +126,12 @@ def solve_task(
             rules = simple_fallback
         rule_sets.append(rules)
 
+    if not rule_sets:
+        if logger:
+            logger.warning("no rules extracted; using fallback")
+        predictions = [fallback_predict(g) for g in test_inputs]
+        return predictions, test_outputs, [], []
+
     # Inject motifs before ranking -------------------------------------------
     signature = extract_task_signature(task)
     if use_deep_priors and config_loader.PRIOR_INJECTION_ENABLED:
@@ -149,6 +155,11 @@ def solve_task(
             config_loader.STRUCTURAL_ATTENTION_WEIGHT,
         )
     best_rules: List = ranked_rules[0][0] if ranked_rules else []
+    if not best_rules:
+        if logger:
+            logger.warning("no candidate rules; using fallback predictor")
+        predictions = [fallback_predict(g) for g in test_inputs]
+        return predictions, test_outputs, [], []
 
     # Recall programs from memory or priors ---------------------------------
     candidate_sets = [select_independent_rules(rs) for rs, _ in ranked_rules]
@@ -231,6 +242,10 @@ def solve_task(
 
     predictions = []
     top_sets = prioritized[:3] if prioritized else []
+    if not top_sets:
+        if logger:
+            logger.warning("no prioritized rule sets; using fallback predictions")
+        return [fallback_predict(g) for g in test_inputs], test_outputs, traces, best_rules
     for g in test_inputs:
         cand_preds = []
         for rs in top_sets:
@@ -256,7 +271,12 @@ def solve_task(
                     cand_preds.append(fallback_predict(g))
                     if logger:
                         logger.info("used dummy fallback predictor")
-        final = soft_vote(cand_preds)
+        try:
+            final = soft_vote(cand_preds)
+        except Exception as exc:
+            if logger:
+                logger.warning("soft vote failed: %s", exc)
+            final = fallback_predict(g)
         predictions.append(final)
 
     # Persist best performing program

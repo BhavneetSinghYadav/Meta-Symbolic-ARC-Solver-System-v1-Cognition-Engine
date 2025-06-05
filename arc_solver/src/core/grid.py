@@ -21,11 +21,17 @@ class Grid:
             if len(row) != row_len:
                 raise ValueError("All rows must have the same length")
 
-    def get(self, row: int, col: int) -> int:
-        """Return the color value at the specified cell with bounds checking."""
-        if 0 <= row < len(self.data) and 0 <= col < len(self.data[0]):
-            return self.data[row][col]
-        return None
+    def get(self, row: int, col: int, default: Any | None = None) -> Any:
+        """Return the color value at ``row``, ``col`` or ``default`` if out of bounds."""
+        if row < 0 or col < 0:
+            return default
+        if row >= len(self.data):
+            return default
+        if not self.data or col >= len(self.data[0]):
+            return default
+        if col >= len(self.data[row]):  # defensive for malformed rows
+            return default
+        return self.data[row][col]
 
     def set(self, row: int, col: int, value: int) -> None:
         """Set the color value at the specified cell."""

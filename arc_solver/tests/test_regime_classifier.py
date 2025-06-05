@@ -25,3 +25,17 @@ def test_delta_requires_heuristic():
     out = Grid([[i + j + 2 for j in range(5)] for i in range(5)])
     sig = compute_task_signature([(inp, out)])
     assert predict_regime_category(sig) is RegimeType.RequiresHeuristic
+
+
+def test_misaligned_pair_no_crash():
+    inp = Grid([[1, 1], [1, 1]])
+    out = Grid([[1]])
+    sig = compute_task_signature([(inp, out)])
+    assert isinstance(sig, dict)
+
+
+def test_corrupted_task_zero_width():
+    inp = Grid([[]])
+    out = Grid([[]])
+    sig = compute_task_signature([(inp, out)])
+    assert isinstance(sig, dict)
