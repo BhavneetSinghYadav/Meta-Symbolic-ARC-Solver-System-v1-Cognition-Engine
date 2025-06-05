@@ -1,3 +1,5 @@
 # Meta configuration for entire solver
 logging_level: INFO
 llm_mode: offline
+repair_enabled: true
+repair_threshold: 0.7

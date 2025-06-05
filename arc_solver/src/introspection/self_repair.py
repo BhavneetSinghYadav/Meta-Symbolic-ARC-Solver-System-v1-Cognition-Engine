@@ -54,6 +54,7 @@ class RuleTraceEntry:
     after: Grid
     affected: List[Tuple[int, int]]
     order: int
+    symbolic_label: str = ""
 
 
 def trace_prediction(rule_set: List[SymbolicRule], input_grid: Grid) -> List[RuleTraceEntry]:
@@ -71,6 +72,7 @@ def trace_prediction(rule_set: List[SymbolicRule], input_grid: Grid) -> List[Rul
                 after=after,
                 affected=rt.affected_cells,
                 order=i,
+                symbolic_label=str(rule),
             )
         )
         grid = after
@@ -205,6 +207,37 @@ def evaluate_repair_candidates(
     return best
 
 
+def run_meta_repair(
+    grid_in: Grid,
+    predicted: Grid,
+    ground_truth: Grid,
+    rules: List[SymbolicRule],
+) -> Tuple[Grid, List[SymbolicRule]]:
+    """Return improved prediction and rule set via discrepancy mining."""
+
+    original_score = predicted.compare_to(ground_truth)
+    discrepancy = compute_discrepancy(predicted, ground_truth)
+    trace = trace_prediction(rules, grid_in)
+    hypotheses = localize_faulty_rule(trace, discrepancy)
+
+    for hyp in hypotheses:
+        entry = next((e for e in trace if e.rule is hyp.rule), None)
+        if entry is None:
+            continue
+        fix = refine_rule(hyp.rule, discrepancy)
+        if fix is None:
+            fix = llm_suggest_rule_fix(entry, discrepancy)
+        if fix is None:
+            continue
+        new_rules = [fix if r is hyp.rule else r for r in rules]
+        new_pred = simulate_rules(grid_in, new_rules)
+        new_score = new_pred.compare_to(ground_truth)
+        if new_score > original_score:
+            return new_pred, new_rules
+
+    return predicted, rules
+
+
 __all__ = [
     "compute_discrepancy",
     "RuleTraceEntry",
@@ -214,4 +247,5 @@ __all__ = [
     "refine_rule",
     "llm_suggest_rule_fix",
     "evaluate_repair_candidates",
+    "run_meta_repair",
 ]

@@ -206,10 +206,23 @@ def main() -> None:
         default="online",
         help="Use local LLM when offline",
     )
+    parser.add_argument(
+        "--allow_self_repair",
+        action="store_true",
+        help="Enable self-repair loop",
+    )
+    parser.add_argument(
+        "--repair_threshold",
+        type=float,
+        default=0.75,
+        help="Score threshold to trigger self-repair",
+    )
     args = parser.parse_args()
 
     from arc_solver.src.utils import config_loader
     config_loader.set_offline_mode(args.llm_mode == "offline")
+    config_loader.set_repair_enabled(args.allow_self_repair)
+    config_loader.set_repair_threshold(args.repair_threshold)
 
     split_prefix = {
         "train": "arc-agi_training",

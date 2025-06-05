@@ -27,8 +27,10 @@ from arc_solver.src.introspection import (
     inject_feedback,
     llm_refine_program,
     evaluate_refinements,
+    run_meta_repair,
 )
 from arc_solver.src.symbolic import rules_to_program
+from arc_solver.src.utils import config_loader
 
 
 def solve_task(
@@ -132,6 +134,13 @@ def solve_task(
         try:
             inp0, out0 = train_pairs[0]
             pred0 = simulate_rules(inp0, best_rules, logger=logger)
+            if (
+                config_loader.REPAIR_ENABLED
+                and pred0.compare_to(out0) < config_loader.REPAIR_THRESHOLD
+            ):
+                pred0, best_rules = run_meta_repair(
+                    inp0, pred0, out0, best_rules
+                )
             trace = build_trace(best_rules[0], inp0, pred0, out0)
             feedback = inject_feedback(trace)
             candidates = llm_refine_program(trace, feedback)
