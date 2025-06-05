@@ -257,8 +257,12 @@ def split_rule_by_overlay(
 # Convenience wrapper
 # ---------------------------------------------------------------------------
 
-def abstract(objects) -> List[SymbolicRule]:
-    """Return symbolic abstractions of a grid pair."""
+def abstract(objects, *, logger=None) -> List[SymbolicRule]:
+    """Return symbolic abstractions of a grid pair.
+
+    When ``logger`` is provided, messages describing which extraction heuristics
+    were used are emitted for debugging purposes.
+    """
     if not isinstance(objects, (list, tuple)) or len(objects) < 2:
         return []
 
@@ -266,12 +270,16 @@ def abstract(objects) -> List[SymbolicRule]:
     overlay = zone_overlay(input_grid)
     try:
         rules: List[SymbolicRule] = []
-        rules.extend(
-            extract_color_change_rules(
-                input_grid, output_grid, zone_overlay=overlay
-            )
+        cc_rules = extract_color_change_rules(
+            input_grid, output_grid, zone_overlay=overlay
         )
-        rules.extend(extract_shape_based_rules(input_grid, output_grid))
+        if logger:
+            logger.info(f"color_change_rules: {len(cc_rules)}")
+        rules.extend(cc_rules)
+        shape_rules = extract_shape_based_rules(input_grid, output_grid)
+        if logger:
+            logger.info(f"shape_based_rules: {len(shape_rules)}")
+        rules.extend(shape_rules)
         split: List[SymbolicRule] = []
         for r in rules:
             if r.transformation.ttype in (
@@ -283,9 +291,13 @@ def abstract(objects) -> List[SymbolicRule]:
                 split.append(r)
         rules = split
     except Exception:
+        if logger:
+            logger.warning("abstraction failure, falling back")
         rules = []
 
     if not rules or any(not isinstance(r, SymbolicRule) for r in rules):
+        if logger:
+            logger.info("using heuristic fallback rules")
         rules = _heuristic_fallback_rules(input_grid, output_grid)
     return rules
 
