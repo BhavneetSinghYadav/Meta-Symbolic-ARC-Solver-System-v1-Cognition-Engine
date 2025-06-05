@@ -21,11 +21,11 @@ import argparse
 import json
 from pathlib import Path
 
-from arc_solver.src.data.arc_dataset import ARCDataset, load_arc_task
-from arc_solver.src.core.grid import Grid
-from arc_solver.src.abstractions.abstractor import abstract
-from arc_solver.src.executor.simulator import simulate_rules
-from arc_solver.src.symbolic.rule_language import rule_to_dsl
+from src.data.arc_dataset import ARCDataset, load_arc_task
+from src.core.grid import Grid
+from src.abstractions.abstractor import abstract
+from src.executor.simulator import simulate_rules
+from src.symbolic.rule_language import rule_to_dsl
 
 
 def load_single_task(task_id: str, data_dir: Path) -> tuple[Grid, Grid]:
