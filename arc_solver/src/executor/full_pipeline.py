@@ -19,8 +19,9 @@ from arc_solver.src.rank_rule_sets import probabilistic_rank_rule_sets
 from arc_solver.src.attention.fusion_injector import apply_structural_attention
 from arc_solver.src.memory.memory_store import (
     load_memory,
-    retrieve_similar_signatures,
+    match_signature,
     save_rule_program,
+    extract_task_constraints,
 )
 from arc_solver.src.utils.signature_extractor import extract_task_signature
 from arc_solver.src.fallback import prioritize, soft_vote
@@ -114,6 +115,25 @@ def solve_task(
         predictions = [fallback_predict(g) for g in test_inputs]
         return predictions, test_outputs, [], []
 
+    if policy == "memory_then_fallback":
+        if logger:
+            logger.info("policy=memory_then_fallback")
+        signature = extract_task_signature(task)
+        recalled = match_signature(
+            signature, constraints=extract_task_constraints(train_pairs[0][0]) if train_pairs else None
+        )
+        if recalled:
+            try_rules = recalled[0]["rules"]
+            preds = []
+            for g in test_inputs:
+                try:
+                    preds.append(simulate_rules(g, try_rules, logger=logger))
+                except Exception:
+                    preds.append(fallback_predict(g))
+            return preds, test_outputs, [], try_rules
+        predictions = [fallback_predict(g) for g in test_inputs]
+        return predictions, test_outputs, [], []
+
     if policy == "fallback_then_prior":
         if logger:
             logger.info("policy=fallback_then_prior")
@@ -184,7 +204,10 @@ def solve_task(
     # Recall programs from memory or priors ---------------------------------
     candidate_sets = [select_independent_rules(rs) for rs, _ in ranked_rules]
     if use_memory:
-        recalled = retrieve_similar_signatures(signature)
+        constraints = (
+            extract_task_constraints(train_pairs[0][0]) if train_pairs else None
+        )
+        recalled = match_signature(signature, constraints=constraints)
         for entry in recalled:
             generalized = generalize_rule_program(entry["rules"], signature)
             candidate_sets.append(select_independent_rules(generalized))
@@ -314,7 +337,10 @@ def solve_task(
     if use_memory and train_pairs and best_rules:
         score = _train_score(best_rules)
         if task_id is not None:
-            save_rule_program(task_id, signature, best_rules, score)
+            constraints = extract_task_constraints(train_pairs[0][0])
+            save_rule_program(
+                task_id, signature, best_rules, score, constraints=constraints
+            )
     if logger:
         logger.info("final rules: %s", rules_to_program(best_rules))
         if test_outputs:

@@ -254,6 +254,9 @@ def main() -> None:
     parser.add_argument("--regime_threshold", type=float, default=0.45, help="Override threshold")
     parser.add_argument("--log_traces", action="store_true", help="Save rule traces")
     parser.add_argument(
+        "--debug_memory", action="store_true", help="Print memory match diagnostics"
+    )
+    parser.add_argument(
         "--llm_mode",
         choices=["online", "offline"],
         default="online",
@@ -276,6 +279,8 @@ def main() -> None:
 
     preload_memory_from_kaggle_input()
     config_sanity_check(args)
+    if args.debug_memory:
+        config_loader.MEMORY_DIAGNOSTICS = True
     logger = get_logger("run_agi_solver")
 
     # Load memory once to report stats

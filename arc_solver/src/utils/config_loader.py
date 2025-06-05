@@ -51,10 +51,7 @@ STRUCTURAL_ATTENTION_WEIGHT: float = float(META_CONFIG.get("structural_attention
 INTROSPECTION_ENABLED: bool = bool(META_CONFIG.get("introspect", False))
 MEMORY_ENABLED: bool = bool(META_CONFIG.get("use_memory", False))
 LAZY_MEMORY_LOADING: bool = bool(META_CONFIG.get("lazy_memory", False))
-SPARSE_MODE: bool = bool(META_CONFIG.get("sparse_mode", False))
-FALLBACK_ON_ABSTRACTION_FAIL: bool = bool(
-    META_CONFIG.get("fallback_on_abstraction_fail", False)
-)
+
 
 
 def set_offline_mode(value: bool) -> None:
