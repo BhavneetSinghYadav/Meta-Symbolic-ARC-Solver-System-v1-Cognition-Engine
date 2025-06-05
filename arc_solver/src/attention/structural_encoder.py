@@ -2,12 +2,21 @@ from __future__ import annotations
 
 """Simple structural context encoder for ARC grids."""
 
-from typing import List, Optional
+from typing import Any, List, Optional
+
+from arc_solver.src.core.grid import Grid
 
 
-def validate_overlay(overlay: List) -> bool:
-    """Return True if ``overlay`` is a 2D list."""
-    return isinstance(overlay, list) and all(isinstance(row, list) for row in overlay)
+def validate_overlay(grid: Grid, overlay: List[List[Any]]) -> bool:
+    """Return True if ``overlay`` matches ``grid`` and has valid values."""
+    h, w = grid.shape()
+    if len(overlay) != h or any(len(row) != w for row in overlay):
+        return False
+    for row in overlay:
+        for val in row:
+            if val is not None and not isinstance(val, (str, int)):
+                return False
+    return True
 
 import numpy as np
 
@@ -24,13 +33,14 @@ class StructuralEncoder:
 
     def encode(
         self,
+        grid: Grid,
         zone_overlay: List[List[Optional[str]]],
         entropy_mask: Optional[List[List[float]]] | None = None,
         symbolic_overlay: Optional[List[List[Optional[str]]]] | None = None,
     ) -> np.ndarray:
         """Return deterministic embedding of task structure."""
 
-        if not validate_overlay(zone_overlay):
+        if not validate_overlay(grid, zone_overlay):
             raise ValueError("Invalid overlay structure")
 
         vec = np.zeros(self.dim, dtype=float)
@@ -53,4 +63,4 @@ class StructuralEncoder:
         return vec
 
 
-__all__ = ["StructuralEncoder"]
+__all__ = ["StructuralEncoder", "validate_overlay"]

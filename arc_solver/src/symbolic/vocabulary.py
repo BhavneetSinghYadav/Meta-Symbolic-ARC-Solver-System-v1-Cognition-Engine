@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List
+from typing import Any, Dict, List
+
+MAX_COLOR = 10
+
+
+def validate_color_range(value: int) -> bool:
+    """Return True if ``value`` represents a legal color index."""
+    try:
+        iv = int(value)
+        return 0 <= iv < MAX_COLOR
+    except Exception:
+        # Allow non-integer color tokens (e.g. "Red")
+        return True
 
 
 class SymbolType(Enum):
@@ -57,6 +69,17 @@ class Symbol:
 
     type: SymbolType
     value: str
+
+    def __post_init__(self) -> None:
+        if self.type is SymbolType.COLOR:
+            if not validate_color_range(self.value):
+                raise ValueError(f"Invalid symbol value: {self.value}")
+
+    def is_valid(self) -> bool:
+        """Return ``True`` if this symbol represents a valid token."""
+        if self.type is SymbolType.COLOR:
+            return validate_color_range(self.value)
+        return True
 
     def __str__(self) -> str:
         return f"{self.type.value}={self.value}"
@@ -111,9 +134,9 @@ class SymbolicRule:
         """Return True if color tokens contain valid integer values."""
         try:
             for sym in self.source + self.target:
-                if sym.type is SymbolType.COLOR:
-                    int(sym.value)
-        except ValueError:
+                if not sym.is_valid():
+                    return False
+        except Exception:
             return False
         return True
 
@@ -125,4 +148,6 @@ __all__ = [
     "Symbol",
     "Transformation",
     "SymbolicRule",
+    "validate_color_range",
+    "MAX_COLOR",
 ]
