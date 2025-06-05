@@ -207,6 +207,13 @@ def config_sanity_check(args: argparse.Namespace) -> None:
     config_loader.set_fallback_on_abstraction_fail(args.fallback_on_abstraction_fail)
     config_loader.set_introspection_enabled(args.introspect)
     config_loader.set_memory_enabled(args.use_memory)
+    # Define memory subsystem defaults for compatibility
+    config_loader.MEMORY_SIMILARITY_THRESHOLD = config_loader.META_CONFIG.get(
+        "memory_similarity_threshold", 0.95
+    )
+    config_loader.MEMORY_DIAGNOSTICS = config_loader.META_CONFIG.get(
+        "memory_diagnostics", False
+    )
     config_loader.print_runtime_config()
 
 
