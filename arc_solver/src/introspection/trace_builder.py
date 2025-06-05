@@ -86,6 +86,9 @@ def build_trace(
             hierarchy = {"rule_set": {z: {"rule": str(rule)}} for z in zones}
             context["hierarchy"] = hierarchy
 
+    if getattr(rule, "meta", None):
+        context.setdefault("rule_derivations", []).append(rule.meta)
+
     return RuleTrace(
         rule=rule,
         affected_cells=affected,

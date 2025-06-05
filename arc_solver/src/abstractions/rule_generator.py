@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from typing import List, Tuple
+from arc_solver.src.symbolic.rule_language import rule_to_dsl
+from arc_solver.src.utils import config_loader
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import SymbolicRule, TransformationType
@@ -14,13 +16,9 @@ def generalize_rules(rules: List[SymbolicRule]) -> List[SymbolicRule]:
     For now the generalization step simply removes duplicate rules while
     preserving order.
     """
-    seen = set()
-    unique: List[SymbolicRule] = []
-    for rule in rules:
-        key = repr(rule)
-        if key not in seen:
-            seen.add(key)
-            unique.append(rule)
+    unique = remove_duplicate_rules(rules)
+    if config_loader.SPARSE_MODE:
+        unique.sort(key=rule_cost)
     return unique
 
 
@@ -68,4 +66,35 @@ def score_rules(
     return scores
 
 
-__all__ = ["generalize_rules", "score_rules"]
+def normalize_rule_dsl(dsl: str) -> str:
+    """Return DSL string normalized for deduplication."""
+    return dsl.replace(" ", "").replace("zone=", "Z=").replace("color=", "C=")
+
+
+def remove_duplicate_rules(rules: List[SymbolicRule]) -> List[SymbolicRule]:
+    """Return rule list with semantic duplicates removed."""
+    seen_hashes = set()
+    deduped: List[SymbolicRule] = []
+    for rule in rules:
+        h = hash(normalize_rule_dsl(rule_to_dsl(rule)))
+        if h not in seen_hashes:
+            deduped.append(rule)
+            seen_hashes.add(h)
+    return deduped
+
+
+def rule_cost(rule: SymbolicRule) -> float:
+    """Return heuristic cost of ``rule`` for sparsity ranking."""
+    zone_str = rule.condition.get("zone", "") if rule.condition else ""
+    zone_size = len(zone_str) if isinstance(zone_str, str) else len(str(zone_str))
+    transform_complexity = len(rule_to_dsl(rule).split("->")[1])
+    return 0.5 * zone_size + transform_complexity
+
+
+__all__ = [
+    "generalize_rules",
+    "score_rules",
+    "normalize_rule_dsl",
+    "remove_duplicate_rules",
+    "rule_cost",
+]

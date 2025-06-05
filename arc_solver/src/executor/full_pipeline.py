@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import List, Tuple
 
 from arc_solver.src.abstractions.abstractor import abstract
-from arc_solver.src.abstractions.rule_generator import generalize_rules
+from arc_solver.src.abstractions.rule_generator import (
+    generalize_rules,
+    remove_duplicate_rules,
+)
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.executor.simulator import simulate_symbolic_program
@@ -155,6 +158,7 @@ def solve_task(
         try:
             rules = abstract([inp, out], logger=logger)
             rules = generalize_rules(rules)
+            rules = remove_duplicate_rules(rules)
             rules = select_independent_rules(rules)
         except Exception:
             if logger:
