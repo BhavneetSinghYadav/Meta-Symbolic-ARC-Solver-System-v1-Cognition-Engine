@@ -3,6 +3,7 @@ from __future__ import annotations
 """Simple symbolic rule simulator for ARC grids."""
 
 from typing import List, Optional
+import logging
 
 from arc_solver.src.utils.logger import get_logger
 
@@ -257,14 +258,18 @@ def simulate_rules(
     rules: List[SymbolicRule],
     *,
     attention_mask: Optional[List[List[bool]]] = None,
+    logger: logging.Logger | None = None,
 ) -> Grid:
     """Apply a list of symbolic rules to ``input_grid`` with reflex checks."""
     grid = Grid([row[:] for row in input_grid.data])
     for rule in rules:
         try:
+            if logger:
+                logger.info(f"apply {rule}")
             grid = _safe_apply_rule(grid, rule, attention_mask)
         except ReflexOverrideException as e:
-            logger.warning(f"Reflex override triggered: {e}")
+            if logger:
+                logger.warning(f"Reflex override triggered: {e}")
             continue
     return grid
 

@@ -28,6 +28,7 @@ from arc_solver.src.introspection import (
     llm_refine_program,
     evaluate_refinements,
 )
+from arc_solver.src.symbolic import rules_to_program
 
 
 def solve_task(
@@ -37,6 +38,8 @@ def solve_task(
     use_memory: bool = False,
     use_prior: bool = False,
     task_id: str | None = None,
+    debug: bool = False,
+    log_dir: str = "logs",
 ):
     """Solve a single ARC task represented by a JSON dictionary."""
     train_pairs = [
@@ -45,15 +48,26 @@ def solve_task(
     test_inputs = [Grid(p["input"]) for p in task.get("test", [])]
     test_outputs = [Grid(p["output"]) for p in task.get("test", []) if "output" in p]
 
+    from arc_solver.src.utils.logger import get_logger
+
+    log_file = None
+    logger = None
+    if debug:
+        ident = task_id or "task"
+        log_file = f"{log_dir}/{ident}.log"
+        logger = get_logger(f"solver.{ident}", file_path=log_file)
+
     rule_sets: List[List] = []
     prior_templates = load_prior_templates()
     simple_fallback = prior_templates[0] if prior_templates else []
     for inp, out in train_pairs:
         try:
-            rules = abstract([inp, out])
+            rules = abstract([inp, out], logger=logger)
             rules = generalize_rules(rules)
             rules = select_independent_rules(rules)
         except Exception:
+            if logger:
+                logger.warning("abstraction exception; using simple fallback")
             rules = simple_fallback
         rule_sets.append(rules)
 
@@ -77,8 +91,10 @@ def solve_task(
         total = 0.0
         for inp, out in train_pairs:
             try:
-                pred = simulate_rules(inp, rules, attention_mask=mask)
+                pred = simulate_rules(inp, rules, attention_mask=mask, logger=logger)
             except Exception:
+                if logger:
+                    logger.warning("training simulation failed; using fallback")
                 pred = fallback_predict(inp)
             total += pred.compare_to(out)
         return total / len(train_pairs)
@@ -99,22 +115,32 @@ def solve_task(
         for m in attn_masks:
             base = max(base, _train_score(rs, m))
         scores.append(base)
+        if logger:
+            logger.info(f"candidate {rules_to_program(rs)} score={base:.3f}")
     prioritized = prioritize(candidate_sets, scores)
     if prioritized:
         best_rules = prioritized[0]
+    if logger:
+        for rs, sc in zip(candidate_sets, scores):
+            logger.info(f"scored {rules_to_program(rs)} -> {sc:.3f}")
+        if prioritized:
+            logger.info(f"selected {rules_to_program(best_rules)}")
 
     # Optional introspection/refinement using first training example
     traces = []
     if introspect and best_rules and train_pairs:
         try:
             inp0, out0 = train_pairs[0]
-            pred0 = simulate_rules(inp0, best_rules)
+            pred0 = simulate_rules(inp0, best_rules, logger=logger)
             trace = build_trace(best_rules[0], inp0, pred0, out0)
             feedback = inject_feedback(trace)
             candidates = llm_refine_program(trace, feedback)
             refined = evaluate_refinements(candidates, inp0, out0)
             best_rules = [refined]
             traces.append(trace)
+            if logger:
+                logger.info("LLM refinement applied")
+                logger.info(rules_to_program(best_rules))
         except Exception:
             pass
 
@@ -124,16 +150,27 @@ def solve_task(
         cand_preds = []
         for rs in top_sets:
             try:
-                cand_preds.append(simulate_rules(g, rs))
+                cand_preds.append(simulate_rules(g, rs, logger=logger))
                 for m in attn_masks:
-                    cand_preds.append(simulate_rules(g, rs, attention_mask=m))
+                    cand_preds.append(simulate_rules(g, rs, attention_mask=m, logger=logger))
             except Exception:
+                if logger:
+                    logger.warning("simulation error, skipping rule set")
                 continue
         if not cand_preds:
             try:
-                cand_preds.append(simulate_rules(g, simple_fallback))
+                cand_preds.append(simulate_rules(g, simple_fallback, logger=logger))
+                if logger:
+                    logger.info("used prior template fallback")
             except Exception:
-                cand_preds.append(fallback_predict(g))
+                if train_pairs and g.shape() == train_pairs[-1][1].shape():
+                    cand_preds.append(train_pairs[-1][1])
+                    if logger:
+                        logger.info("used copy-train heuristic")
+                else:
+                    cand_preds.append(fallback_predict(g))
+                    if logger:
+                        logger.info("used dummy fallback predictor")
         final = soft_vote(cand_preds)
         predictions.append(final)
 
@@ -142,6 +179,8 @@ def solve_task(
         score = _train_score(best_rules)
         if task_id is not None:
             save_rule_program(task_id, signature, best_rules, score)
+    if logger:
+        logger.info("final rules: %s", rules_to_program(best_rules))
 
     return predictions, test_outputs, traces, best_rules
 
