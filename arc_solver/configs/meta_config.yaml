@@ -1,6 +1,6 @@
 # Meta configuration for entire solver
 logging_level: INFO
-llm_mode: offline
+llm_mode: local
 repair_enabled: true
 repair_threshold: 0.7
 reflex_override:

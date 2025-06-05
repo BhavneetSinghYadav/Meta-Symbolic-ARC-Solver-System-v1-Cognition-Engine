@@ -12,6 +12,7 @@ if str(repo_root) not in sys.path:
 import argparse
 import json
 import traceback
+import os
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -194,7 +195,7 @@ def config_sanity_check(args: argparse.Namespace) -> None:
     """Apply CLI options to global config and print the runtime settings."""
     from arc_solver.src.utils import config_loader
 
-    config_loader.set_offline_mode(args.llm_mode == "offline")
+    config_loader.set_llm_mode(args.llm_mode)
     config_loader.set_repair_enabled(args.allow_self_repair)
     config_loader.set_repair_threshold(args.repair_threshold)
     config_loader.set_reflex_override(args.regime_override)
@@ -266,9 +267,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--llm_mode",
-        choices=["online", "offline"],
+        choices=["online", "offline", "local"],
         default="online",
-        help="Use local LLM when offline",
+        help="LLM usage mode",
     )
     parser.add_argument(
         "--allow_self_repair",
@@ -282,6 +283,12 @@ def main() -> None:
         help="Score threshold to trigger self-repair",
     )
     args = parser.parse_args()
+
+    if args.llm_mode == "local":
+        os.environ.setdefault(
+            "LOCAL_GGUF_MODEL_PATH",
+            "/kaggle/working/tinyllama-1.1b-chat-v1.0.q4_K_M.gguf",
+        )
 
     from arc_solver.src.memory import preload_memory_from_kaggle_input
 

@@ -15,8 +15,16 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationType,
 )
 from .trace_builder import build_trace, RuleTrace
-from arc_solver.src.utils.config_loader import OFFLINE_MODE
+import logging
+from arc_solver.src.utils.config_loader import OFFLINE_MODE, META_CONFIG
 from . import llm_engine
+
+logger = logging.getLogger(__name__)
+
+try:
+    from arc_solver.src.introspection.llm_engine import repair_symbolic_rule
+except Exception:
+    repair_symbolic_rule = None
 
 try:  # pragma: no cover - optional dependency
     import openai
@@ -227,6 +235,16 @@ def run_meta_repair(
         fix = refine_rule(hyp.rule, discrepancy)
         if fix is None:
             fix = llm_suggest_rule_fix(entry, discrepancy)
+        if fix is None and META_CONFIG.get("llm_mode") == "local" and repair_symbolic_rule:
+            try:
+                dsl = repair_symbolic_rule(str(entry.rule), str(discrepancy))
+                if dsl:
+                    from arc_solver.src.symbolic.rule_language import parse_rule
+
+                    fix = parse_rule(dsl)
+                    logger.info(f"Repaired rule via local LLM: {dsl}")
+            except Exception as e:  # pragma: no cover - handle parse errors
+                logger.warning(f"Failed to parse LLM-repaired rule: {e}")
         if fix is None:
             continue
         new_rules = [fix if r is hyp.rule else r for r in rules]
