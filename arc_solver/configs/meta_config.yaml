@@ -17,4 +17,3 @@ use_memory: false
 use_structural_attention: true
 structural_attention_weight: 0.2
 lazy_memory: false
-conflict_resolution: most_frequent

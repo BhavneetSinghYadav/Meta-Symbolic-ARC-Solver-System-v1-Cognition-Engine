@@ -109,7 +109,6 @@ def _predict(
     prior_threshold: float = 0.4,
     motif_file: str | None = None,
     log_traces: bool = False,
-    debug_simulation_trace: bool = False,
 ):
     """Return predictions for ``task`` optionally refining with introspection."""
 
@@ -247,11 +246,6 @@ def main() -> None:
     parser.add_argument("--regime_threshold", type=float, default=0.45, help="Override threshold")
     parser.add_argument("--log_traces", action="store_true", help="Save rule traces")
     parser.add_argument(
-        "--debug_simulation_trace",
-        action="store_true",
-        help="Write detailed simulation trace logs",
-    )
-    parser.add_argument(
         "--llm_mode",
         choices=["online", "offline"],
         default="online",
@@ -315,7 +309,6 @@ def main() -> None:
                 prior_threshold=args.prior_threshold,
                 motif_file=args.motif_file,
                 log_traces=args.log_traces,
-                debug_simulation_trace=args.debug_simulation_trace,
             )
         except Exception as exc:
             print(f"[ERROR] {task.task_id}: {exc}")
