@@ -5,8 +5,10 @@ from __future__ import annotations
 from typing import List, Optional
 import logging
 
+from collections import Counter, defaultdict
 from arc_solver.src.utils.logger import get_logger
 from arc_solver.src.symbolic.vocabulary import validate_color_range, MAX_COLOR
+from arc_solver.src.utils import config_loader
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import (
@@ -20,10 +22,70 @@ from arc_solver.src.utils.grid_utils import validate_grid
 
 
 logger = get_logger(__name__)
+CONFLICT_POLICY = config_loader.META_CONFIG.get("conflict_resolution", "most_frequent")
 
 
 class ReflexOverrideException(Exception):
     """Raised when a rule violates a reflex constraint."""
+
+
+def _grid_contains(grid: Grid, value: int) -> bool:
+    h, w = grid.shape()
+    for r in range(h):
+        for c in range(w):
+            if grid.get(r, c) == value:
+                return True
+    return False
+
+
+def validate_rule_application(rule: SymbolicRule, grid: Grid) -> bool:
+    zone = rule.condition.get("zone") if rule.condition else None
+    if zone:
+        overlay = zone_overlay(grid)
+        zones = {sym.value for row in overlay for sym in row if sym}
+        if zone not in zones:
+            return False
+    src = next((s for s in rule.source if s.type is SymbolType.COLOR), None)
+    if src is not None:
+        try:
+            if not _grid_contains(grid, int(src.value)):
+                return False
+        except Exception:
+            return False
+    tgt = next((s for s in rule.target if s.type is SymbolType.COLOR), None)
+    if tgt is not None:
+        try:
+            if int(tgt.value) >= MAX_COLOR:
+                return False
+        except Exception:
+            return False
+    return True
+
+
+def mark_conflict(loc: tuple[int, int], uncertainty_grid: list[list[int]] | None = None) -> None:
+    if uncertainty_grid is not None:
+        r, c = loc
+        uncertainty_grid[r][c] += 1
+
+
+def visualize_uncertainty(uncertainty_grid: list[list[int]], output_path: str = "uncertainty_map.png") -> None:
+    try:
+        import matplotlib.pyplot as plt
+        plt.imshow(uncertainty_grid, cmap="hot", interpolation="nearest")
+        plt.axis("off")
+        plt.savefig(output_path)
+        plt.close()
+    except Exception as exc:  # pragma: no cover - optional
+        logger.warning(f"Could not visualize uncertainty: {exc}")
+
+
+def check_symmetry_break(rule: SymbolicRule, grid: Grid, attention_mask: Optional[list[list[bool]]] = None) -> Grid:
+    after = _safe_apply_rule(grid, rule, attention_mask, perform_checks=False)
+    if violates_symmetry(after, grid):
+        raise ReflexOverrideException("Symmetry violated by rule")
+    if breaks_training_constraint(after):
+        raise ReflexOverrideException("Training constraint mismatch")
+    return after
 
 
 def _is_vertically_symmetric(grid: Grid) -> bool:
@@ -248,7 +310,10 @@ def _apply_functional(
 
 
 def _safe_apply_rule(
-    grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]]
+    grid: Grid,
+    rule: SymbolicRule,
+    attention_mask: Optional[List[List[bool]]] = None,
+    perform_checks: bool = True,
 ) -> Grid:
     before = Grid([row[:] for row in grid.data])
 
@@ -269,10 +334,11 @@ def _safe_apply_rule(
     else:
         after = grid
 
-    if violates_symmetry(after, before):
-        raise ReflexOverrideException("Symmetry violation")
-    if breaks_training_constraint(after):
-        raise ReflexOverrideException("Training constraint mismatch")
+    if perform_checks:
+        if violates_symmetry(after, before):
+            raise ReflexOverrideException("Symmetry violation")
+        if breaks_training_constraint(after):
+            raise ReflexOverrideException("Training constraint mismatch")
 
     return after
 
@@ -283,22 +349,55 @@ def simulate_rules(
     *,
     attention_mask: Optional[List[List[bool]]] = None,
     logger: logging.Logger | None = None,
+    trace_log: list[dict] | None = None,
+    uncertainty_grid: list[list[int]] | None = None,
+    conflict_policy: str | None = None,
 ) -> Grid:
     """Apply a list of symbolic rules to ``input_grid`` with reflex checks."""
     grid = Grid([row[:] for row in input_grid.data])
-    for rule in rules:
+    h, w = grid.shape()
+    if uncertainty_grid is None:
+        uncertainty_grid = [[0 for _ in range(w)] for _ in range(h)]
+    write_log: dict[tuple[int, int], list[int]] = defaultdict(list)
+    write_vals: dict[tuple[int, int], list[int]] = defaultdict(list)
+
+    for idx, rule in enumerate(rules):
+        if not validate_rule_application(rule, grid):
+            if logger:
+                logger.warning(f"Skipping rule due to invalid context: {rule}")
+            continue
         try:
+            tentative = check_symmetry_break(rule, grid, attention_mask)
+        except ReflexOverrideException:
             if logger:
-                logger.info(f"apply {rule}")
-            grid = _safe_apply_rule(grid, rule, attention_mask)
-        except ReflexOverrideException as e:
-            if logger:
-                logger.warning(f"Reflex override triggered: {e}")
+                logger.warning(f"Reflex override triggered by rule: {rule}")
             continue
-        except Exception as e:
+
+        changed: list[tuple[int, int, int, int]] = []
+        for r in range(h):
+            for c in range(w):
+                before_val = grid.get(r, c)
+                after_val = tentative.get(r, c)
+                if before_val != after_val:
+                    write_log[(r, c)].append(idx)
+                    write_vals[(r, c)].append(after_val)
+                    changed.append((r, c, before_val, after_val))
+        if trace_log is not None:
+            trace_log.append({"rule_id": idx, "zone": rule.condition.get("zone"), "effect": changed})
+        grid = tentative
+
+    policy = conflict_policy or CONFLICT_POLICY
+    for loc, writers in write_log.items():
+        if len(writers) > 1:
             if logger:
-                logger.warning(f"Rule application failed: {rule} — {e}")
-            continue
+                logger.warning(f"Collision at {loc}: rules {writers}")
+            mark_conflict(loc, uncertainty_grid)
+            vals = write_vals[loc]
+            if policy == "first":
+                grid.set(loc[0], loc[1], vals[0])
+            elif policy == "most_frequent":
+                grid.set(loc[0], loc[1], Counter(vals).most_common(1)[0][0])
+
     if not validate_grid(grid, expected_shape=input_grid.shape()):
         if logger:
             logger.warning("simulation produced invalid grid; returning copy")
@@ -321,4 +420,7 @@ __all__ = [
     "simulate_symbolic_program",
     "score_prediction",
     "ReflexOverrideException",
+    "validate_rule_application",
+    "check_symmetry_break",
+    "visualize_uncertainty",
 ]
