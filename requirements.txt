@@ -2,3 +2,4 @@ pytest
 PyYAML
 matplotlib
 numpy
+scikit-learn
