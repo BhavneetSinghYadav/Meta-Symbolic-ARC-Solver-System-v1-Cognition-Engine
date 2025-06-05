@@ -13,6 +13,7 @@ from arc_solver.src.executor.attention import AttentionMask, zone_to_mask
 from arc_solver.src.executor.dependency import select_independent_rules
 from arc_solver.src.segment.segmenter import zone_overlay
 from arc_solver.src.rank_rule_sets import probabilistic_rank_rule_sets
+from arc_solver.src.attention.fusion_injector import apply_structural_attention
 from arc_solver.src.memory.memory_store import (
     load_memory,
     retrieve_similar_signatures,
@@ -141,6 +142,12 @@ def solve_task(
             rule_sets.append(select_independent_rules(p))
 
     ranked_rules = probabilistic_rank_rule_sets(rule_sets, train_pairs)
+    if config_loader.META_CONFIG.get("use_structural_attention") and train_pairs:
+        ranked_rules = apply_structural_attention(
+            train_pairs[0][0],
+            ranked_rules,
+            config_loader.META_CONFIG.get("structural_attention_weight", 0.2),
+        )
     best_rules: List = ranked_rules[0][0] if ranked_rules else []
 
     # Recall programs from memory or priors ---------------------------------
