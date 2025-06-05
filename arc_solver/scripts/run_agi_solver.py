@@ -17,6 +17,8 @@ from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 from arc_solver.src.data.visualization import visualize
+from arc_solver.src.utils import config_loader
+from arc_solver.src.utils.logger import get_logger
 
 from arc_solver.src.core.grid import Grid
 
@@ -266,6 +268,9 @@ def main() -> None:
 
     preload_memory_from_kaggle_input()
     config_sanity_check(args)
+    logger = get_logger("run_agi_solver")
+    config_loader.print_runtime_config()
+    logger.info(f"Using config: {config_loader.META_CONFIG}")
 
     split_prefix = {
         "train": "arc-agi_training",

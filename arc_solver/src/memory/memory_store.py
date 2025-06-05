@@ -59,8 +59,18 @@ def retrieve_similar_signatures(
     scored.sort(key=lambda x: x[0], reverse=True)
     results: List[Dict[str, Any]] = []
     for sim, entry in scored[:top_k]:
-        rules = [parse_rule(r) for r in entry.get("rules", [])]
-        results.append({"rules": rules, "score": entry.get("score", 0.0), "similarity": sim})
+        parsed = []
+        for r in entry.get("rules", []):
+            try:
+                rule = parse_rule(r)
+            except Exception:
+                continue
+            if not rule.is_well_formed():
+                continue
+            parsed.append(rule)
+        if not parsed:
+            continue
+        results.append({"rules": parsed, "score": entry.get("score", 0.0), "similarity": sim})
     return results
 
 

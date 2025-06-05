@@ -6,6 +6,7 @@ from typing import List, Optional
 import logging
 
 from arc_solver.src.utils.logger import get_logger
+from arc_solver.src.symbolic.vocabulary import validate_color_range, MAX_COLOR
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import (
@@ -86,6 +87,8 @@ def _apply_replace(
                 return grid
             break
     if src_color is None or tgt_color is None:
+        return grid
+    if not validate_color_range(tgt_color):
         return grid
 
     h, w = grid.shape()

@@ -20,7 +20,9 @@ def apply_structural_attention(
 
     overlay = zone_overlay(grid)
     encoder = StructuralEncoder(dim=_DEF_DIM)
-    context = encoder.encode([[z.value if z else None for z in row] for row in overlay])
+    context = encoder.encode(
+        grid, [[z.value if z else None for z in row] for row in overlay]
+    )
     attention = SymbolicAttention(weight=weight, dim=_DEF_DIM)
     return attention.apply(ranked_rules, context)
 

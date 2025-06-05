@@ -180,6 +180,8 @@ def solve_task(
         total = 0.0
         for inp, out in train_pairs:
             try:
+                if not rules:
+                    raise ValueError("empty rules")
                 pred = simulate_rules(inp, rules, attention_mask=mask, logger=logger)
             except Exception:
                 if logger:
@@ -228,7 +230,12 @@ def solve_task(
                 pred0, best_rules = run_meta_repair(
                     inp0, pred0, out0, best_rules
                 )
-            trace = build_trace(best_rules[0], inp0, pred0, out0)
+            try:
+                trace = build_trace(best_rules[0], inp0, pred0, out0)
+            except Exception as e:
+                if logger:
+                    logger.warning(f"Trace failed: {e}")
+                return [fallback_predict(g) for g in test_inputs], test_outputs, traces, best_rules
             feedback = inject_feedback(trace)
             candidates = llm_refine_program(trace, feedback)
             refined = evaluate_refinements(candidates, inp0, out0)
@@ -250,13 +257,17 @@ def solve_task(
         cand_preds = []
         for rs in top_sets:
             try:
+                if not rs:
+                    raise ValueError("no rules")
                 cand_preds.append(simulate_rules(g, rs, logger=logger))
                 for m in attn_masks:
-                    cand_preds.append(simulate_rules(g, rs, attention_mask=m, logger=logger))
+                    cand_preds.append(
+                        simulate_rules(g, rs, attention_mask=m, logger=logger)
+                    )
             except Exception:
                 if logger:
                     logger.warning("simulation error, skipping rule set")
-                continue
+                cand_preds.append(fallback_predict(g))
         if not cand_preds:
             try:
                 cand_preds.append(simulate_rules(g, simple_fallback, logger=logger))
@@ -286,6 +297,15 @@ def solve_task(
             save_rule_program(task_id, signature, best_rules, score)
     if logger:
         logger.info("final rules: %s", rules_to_program(best_rules))
+        if test_outputs:
+            try:
+                score = sum(
+                    p.compare_to(o)
+                    for p, o in zip(predictions, test_outputs)
+                ) / len(test_outputs)
+                logger.debug(f"[{task_id}] Final prediction score: {score:.3f}")
+            except Exception:
+                pass
 
     return predictions, test_outputs, traces, best_rules
 

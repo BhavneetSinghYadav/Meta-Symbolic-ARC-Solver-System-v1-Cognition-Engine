@@ -11,6 +11,7 @@ from .vocabulary import (
     Transformation,
     TransformationNature,
     TransformationType,
+    validate_color_range,
 )
 
 
@@ -24,6 +25,8 @@ def _parse_symbol(token: str) -> Symbol:
         stype = SymbolType[key]
     except KeyError as exc:
         raise ValueError(f"Unknown symbol type: {key}") from exc
+    if stype is SymbolType.COLOR and not validate_color_range(value):
+        raise ValueError(f"Invalid color value: {value}")
     return Symbol(stype, value)
 
 
