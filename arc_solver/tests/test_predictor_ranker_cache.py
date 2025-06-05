@@ -30,6 +30,23 @@ def test_select_best_program_with_conflict():
     assert best == correct
 
 
+def test_select_best_program_rejects_invalid():
+    grid_in = Grid([[1]])
+    grid_out = Grid([[2]])
+    good = [_color_rule(1, 2)]
+    bad = [_color_rule(1, 0)]
+    best = select_best_program(grid_in, grid_out, [bad, good])
+    assert best == good
+
+
+def test_select_best_program_refines_low_score():
+    grid_in = Grid([[1]])
+    grid_out = Grid([[2]])
+    bad = [_color_rule(1, 3)]
+    refined = select_best_program(grid_in, grid_out, [bad])
+    assert refined and refined[0].target[0].value == "2"
+
+
 def test_policy_cache_equivalent_ruleset():
     cache = PolicyCache()
     rs = [_color_rule(1, 2)]
