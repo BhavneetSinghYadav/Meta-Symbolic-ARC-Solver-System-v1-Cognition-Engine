@@ -79,6 +79,8 @@ def solve_task(
         log_regime,
         RegimeType,
     )
+    from arc_solver.src.regime.policy_router import decide_policy
+    from arc_solver.src.regime.decision_controller import DecisionReflexController
 
     signature_stats = compute_task_signature(train_pairs)
     regime = predict_regime_category(signature_stats)
@@ -89,15 +91,29 @@ def solve_task(
         )
     log_regime(task_id or "unknown", signature_stats, regime, confidence)
 
-    if (
-        config_loader.REFLEX_OVERRIDE_ENABLED
-        and confidence < config_loader.REGIME_THRESHOLD
-    ):
+    controller = DecisionReflexController(task_id or "unknown", regime, confidence)
+    policy = controller.decide()
+
+    if policy == "fallback":
         if logger:
-            logger.info(
-                "reflex override triggered; using %s",
-                config_loader.DEFAULT_OVERRIDE_PATH,
-            )
+            logger.info("policy=fallback")
+        if use_deep_priors and config_loader.PRIOR_INJECTION_ENABLED:
+            signature = extract_task_signature(task)
+            prior_sets = match_task_signature_to_prior(signature, prior_threshold)
+            if prior_sets:
+                preds = []
+                for g in test_inputs:
+                    try:
+                        preds.append(simulate_rules(g, prior_sets[0], logger=logger))
+                    except Exception:
+                        preds.append(fallback_predict(g))
+                return preds, test_outputs, [], prior_sets[0]
+        predictions = [fallback_predict(g) for g in test_inputs]
+        return predictions, test_outputs, [], []
+
+    if policy == "fallback_then_prior":
+        if logger:
+            logger.info("policy=fallback_then_prior")
         if use_deep_priors and config_loader.PRIOR_INJECTION_ENABLED:
             signature = extract_task_signature(task)
             prior_sets = match_task_signature_to_prior(signature, prior_threshold)
