@@ -18,6 +18,7 @@ from .vocabulary import (
     Transformation,
     TransformationNature,
     TransformationType,
+    validate_color_range as vocab_color_range,
 )
 
 logger = logging.getLogger(__name__)
@@ -35,15 +36,7 @@ MAX_SYMBOL_VALUE = 10
 def validate_color_range(color: int | str) -> bool:
     """Return ``True`` if ``color`` is a valid ARC color index (0-9)."""
 
-    try:
-        value = int(color)
-    except Exception:
-        logger.warning(f"Invalid color token: {color}")
-        return False
-    if 0 <= value < MAX_SYMBOL_VALUE:
-        return True
-    logger.warning(f"Color value out of range: {value}")
-    return False
+    return vocab_color_range(color)
 
 
 def clean_dsl_string(s: str) -> str:
@@ -91,10 +84,14 @@ def _parse_symbol(token: str) -> Symbol:
     except KeyError as exc:
         raise ValueError(f"Unknown symbol type: {key}") from exc
     if stype is SymbolType.COLOR:
-        value_int = extract_symbol_value(value)
-        if not validate_color_range(value_int):
-            raise ValueError(f"Invalid color value: {value}")
-        value = str(value_int)
+        if value.isdigit():
+            value_int = extract_symbol_value(value)
+            if not validate_color_range(value_int):
+                raise ValueError(f"Invalid color value: {value}")
+            value = str(value_int)
+        else:
+            if not validate_color_range(value):
+                raise ValueError(f"Invalid color value: {value}")
     return Symbol(stype, value)
 
 

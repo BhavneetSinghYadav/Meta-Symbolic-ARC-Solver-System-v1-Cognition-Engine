@@ -59,6 +59,9 @@ SPARSE_MODE: bool = bool(META_CONFIG.get("sparse_mode", False))
 FALLBACK_ON_ABSTRACTION_FAIL: bool = bool(
     META_CONFIG.get("fallback_on_abstraction_fail", False)
 )
+IGNORE_MEMORY_SHAPE_CONSTRAINT: bool = bool(
+    META_CONFIG.get("ignore_memory_shape_constraint", False)
+)
 
 
 
@@ -150,6 +153,13 @@ def set_fallback_on_abstraction_fail(value: bool) -> None:
     global FALLBACK_ON_ABSTRACTION_FAIL
     FALLBACK_ON_ABSTRACTION_FAIL = value
     META_CONFIG["fallback_on_abstraction_fail"] = value
+
+
+def set_ignore_memory_shape_constraint(value: bool) -> None:
+    """Enable or disable ignoring shape constraints during memory recall."""
+    global IGNORE_MEMORY_SHAPE_CONSTRAINT
+    IGNORE_MEMORY_SHAPE_CONSTRAINT = value
+    META_CONFIG["ignore_memory_shape_constraint"] = value
 
 
 def print_runtime_config() -> None:

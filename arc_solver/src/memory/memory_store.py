@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import json
-import os
 import shutil
 from pathlib import Path
 from typing import List, Dict, Any
@@ -39,13 +37,13 @@ def auto_clean_memory_file(path: Path) -> None:
         with path.open("r", encoding="utf-8") as f:
             json.load(f)
     except Exception as e:
-        logger.error(f"Corrupted memory file: {e}")
+        logger.error(f"MEMORY corrupted memory file: {e}")
         backup = path.with_suffix(".bak")
         try:
             shutil.move(path, backup)
-            logger.warning(f"Memory file backed up to {backup}")
+            logger.warning(f"MEMORY file backed up to {backup}")
         except Exception as exc:
-            logger.error(f"Failed to backup memory file: {exc}")
+            logger.error(f"MEMORY failed to backup memory file: {exc}")
         path.write_text("[]", encoding="utf-8")
 
 
@@ -69,20 +67,20 @@ def load_memory(path: str | Path = _DEFAULT_PATH, *, verbose: bool = False) -> L
         with p.open("r", encoding="utf-8") as f:
             raw_data = json.load(f)
     except Exception as e:
-        logger.error(f"Failed to load memory: {e}")
+        logger.error(f"MEMORY failed to load memory: {e}")
         auto_clean_memory_file(p)
         _LAST_LOAD_STATS = (0, 0)
         return []
 
     if not isinstance(raw_data, list):
-        logger.error("Memory file format invalid")
+        logger.error("MEMORY file format invalid")
         _LAST_LOAD_STATS = (0, 0)
         return []
 
     valid_memory = [e for e in raw_data if validate_program_entry(e)]
     skipped = len(raw_data) - len(valid_memory)
     if config_loader.MEMORY_DIAGNOSTICS:
-        logger.info(f"Memory loaded: {len(valid_memory)} valid, {skipped} skipped")
+        logger.info(f"MEMORY loaded: {len(valid_memory)} valid, {skipped} skipped")
 
     if config_loader.LAZY_MEMORY_LOADING:
         loaded = sum(len(e.get("rules", [])) for e in valid_memory)
@@ -90,7 +88,7 @@ def load_memory(path: str | Path = _DEFAULT_PATH, *, verbose: bool = False) -> L
         if verbose:
             print(f"Loaded {loaded} rules (lazy)")
         if len(valid_memory) == 0:
-            logger.warning("No valid memory entries found in memory_store.json")
+            logger.warning("MEMORY no valid memory entries found in memory_store.json")
         return valid_memory
 
     cleaned: List[Dict[str, Any]] = []
@@ -120,7 +118,7 @@ def load_memory(path: str | Path = _DEFAULT_PATH, *, verbose: bool = False) -> L
             f"Loaded {loaded} rules, {discarded} discarded as malformed, {skipped} entries skipped"
         )
     if len(cleaned) == 0:
-        logger.warning("No valid memory entries found in memory_store.json")
+        logger.warning("MEMORY no valid memory entries found in memory_store.json")
     return cleaned
 
 
@@ -199,11 +197,16 @@ def normalize_signature(sig: Any) -> List[float]:
 def get_best_memory_match(
     current_sig: Any,
     memory_entries: List[Dict[str, Any]],
-    threshold: float = 0.95,
+    threshold: float | None = None,
 ) -> List[Dict[str, Any]]:
     """Return entries whose signature cosine similarity exceeds ``threshold``."""
+
+    if threshold is None:
+        threshold = config_loader.MEMORY_SIMILARITY_THRESHOLD
+
     norm_cur = [normalize_signature(current_sig)]
     matches = []
+    sims: List[float] = []
     for entry in memory_entries:
         sig = normalize_signature(entry.get("signature", []))
         if not sig or not norm_cur[0]:
@@ -214,9 +217,26 @@ def get_best_memory_match(
                 sim = cosine_similarity(norm_cur, [sig])[0][0]
             except Exception:
                 sim = similarity_score(str(current_sig), str(entry.get("signature", "")))
+
+        sims.append(sim)
+        if config_loader.MEMORY_DIAGNOSTICS:
+            logger.info(f"MEMORY match score: {sim:.4f} for task {entry.get('task_id')}")
+
         if sim >= threshold:
             matches.append((sim, entry))
+
+    if config_loader.MEMORY_DIAGNOSTICS:
+        avg_sim = sum(sims) / len(sims) if sims else 0.0
+        max_sim = max(sims) if sims else 0.0
+        logger.info(
+            f"MEMORY diagnostics - stored: {len(memory_entries)}, avg_similarity: {avg_sim:.4f}, max_similarity: {max_sim:.4f}"
+        )
+
     matches.sort(key=lambda x: x[0], reverse=True)
+
+    if not matches:
+        logger.warning("MEMORY No memory match above threshold")
+
     return [e for _, e in matches]
 
 
@@ -231,6 +251,8 @@ def match_signature(
         threshold = config_loader.MEMORY_SIMILARITY_THRESHOLD
     memory = load_memory(path)
     candidates = get_best_memory_match(current_signature, memory, threshold)
+    ignore_shape = config_loader.IGNORE_MEMORY_SHAPE_CONSTRAINT
+    shape_skipped = 0
     if constraints:
         filtered = []
         for entry in candidates:
@@ -239,7 +261,8 @@ def match_signature(
                 filtered.append(entry)
                 continue
             if c.get("shape") and constraints.get("shape"):
-                if tuple(c["shape"]) != tuple(constraints["shape"]):
+                if tuple(c["shape"]) != tuple(constraints["shape"]) and not ignore_shape:
+                    shape_skipped += 1
                     continue
             filtered.append(entry)
         candidates = filtered
@@ -255,8 +278,10 @@ def match_signature(
             parsed_candidates.append({**entry, "rules": parsed_rules})
     if config_loader.MEMORY_DIAGNOSTICS:
         logger.info(
-            f"Memory loaded: {len(memory)} entries; {len(parsed_candidates)} injected"
+            f"MEMORY loaded: {len(memory)} entries; {len(parsed_candidates)} injected"
         )
+        if shape_skipped:
+            logger.info(f"MEMORY shape skipped: {shape_skipped}")
     return parsed_candidates
 
 
