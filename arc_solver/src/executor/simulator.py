@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 import logging
+import math
 
 from collections import Counter, defaultdict
 from arc_solver.src.utils.logger import get_logger
@@ -18,12 +19,27 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationType,
 )
 from arc_solver.src.segment.segmenter import zone_overlay
-from arc_solver.src.executor.dependency import sort_rules_by_dependency
+from arc_solver.src.executor.dependency import (
+    sort_rules_by_dependency,
+    sort_rules_by_topology,
+)
 from arc_solver.src.utils.grid_utils import validate_grid
 
 
 logger = get_logger(__name__)
 CONFLICT_POLICY = config_loader.META_CONFIG.get("conflict_resolution", "most_frequent")
+
+
+def _grid_entropy(grid: Grid) -> float:
+    counts = grid.count_colors()
+    total = sum(counts.values())
+    ent = 0.0
+    for v in counts.values():
+        if v == 0:
+            continue
+        p = v / total
+        ent -= p * math.log2(p)
+    return ent
 
 
 class ReflexOverrideException(Exception):
@@ -380,7 +396,11 @@ def simulate_rules(
     conflict_policy: str | None = None,
 ) -> Grid:
     """Apply a list of symbolic rules to ``input_grid`` with reflex checks."""
-    rules = sort_rules_by_dependency(rules)
+    # Determine execution order based on rule dependencies and spatial topology
+    try:
+        rules = sort_rules_by_topology(rules)
+    except Exception:
+        rules = sort_rules_by_dependency(rules)
     grid = Grid([row[:] for row in input_grid.data])
     h, w = grid.shape()
     if uncertainty_grid is None:
@@ -415,8 +435,15 @@ def simulate_rules(
                     write_log[(r, c)].append(idx)
                     write_vals[(r, c)].append(after_val)
                     changed.append((r, c, before_val, after_val))
-        if logger and not changed:
-            logger.info("Rule had no effect")
+
+        if not changed:
+            if logger:
+                logger.info("Pruning ineffective rule")
+            continue
+        coverage_ratio = len(changed) / (h * w)
+        rule.meta["coverage_ratio"] = coverage_ratio
+        if coverage_ratio < 0.01:
+            rule.meta["demoted"] = True
         if zone:
             overlay = zone_overlay(grid)
             zone_cells = [
@@ -474,6 +501,18 @@ def simulate_rules(
 
     if logger and conflict_count:
         logger.info(f"Conflicting writes: {conflict_count}")
+
+    coverage_score = sum(
+        1 for r in range(h) for c in range(w) if input_grid.get(r, c) != grid.get(r, c)
+    ) / (h * w)
+    entropy_delta = _grid_entropy(grid) - _grid_entropy(input_grid)
+    if logger:
+        logger.info(
+            "coverage=%.2f entropy_delta=%.3f conflicts=%d",
+            coverage_score,
+            entropy_delta,
+            conflict_count,
+        )
 
     if not validate_grid(grid, expected_shape=input_grid.shape()):
         if logger:

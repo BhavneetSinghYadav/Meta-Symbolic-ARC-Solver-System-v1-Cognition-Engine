@@ -60,6 +60,18 @@ def sort_rules_by_dependency(rules: List[SymbolicRule]) -> List[SymbolicRule]:
     return [rules[i] for i in order]
 
 
+def sort_rules_by_topology(rules: List[SymbolicRule]) -> List[SymbolicRule]:
+    """Return ``rules`` ordered respecting zone and color dependencies."""
+    zone_groups: Dict[str | None, List[SymbolicRule]] = defaultdict(list)
+    for rule in rules:
+        zone = rule.condition.get("zone") if rule.condition else None
+        zone_groups[zone].append(rule)
+    ordered: List[SymbolicRule] = []
+    for key in sorted(zone_groups.keys(), key=lambda z: "" if z is None else str(z)):
+        ordered.extend(sort_rules_by_dependency(zone_groups[key]))
+    return ordered
+
+
 def _extract_color(rule: SymbolicRule) -> str | None:
     for sym in rule.target:
         if sym.type is SymbolType.COLOR:
@@ -102,4 +114,5 @@ __all__ = [
     "select_independent_rules",
     "rule_dependency_graph",
     "sort_rules_by_dependency",
+    "sort_rules_by_topology",
 ]
