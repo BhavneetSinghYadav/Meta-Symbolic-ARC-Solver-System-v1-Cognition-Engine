@@ -47,6 +47,10 @@ PRIOR_FALLBACK_ONLY: bool = bool(_PRIOR_CONF.get("fallback_only", False))
 PRIOR_MAX_INJECT: int = int(_PRIOR_CONF.get("max_inject", 3))
 
 ZONE_COVERAGE_THRESHOLD: float = float(META_CONFIG.get("zone_coverage_threshold", 0.6))
+# Policy for handling rules conditioned on zones when coverage is low
+ZONE_PERSISTENCE_POLICY: str = str(
+    META_CONFIG.get("zone_persistence_policy", "relaxed")
+)
 
 USE_STRUCTURAL_ATTENTION: bool = bool(META_CONFIG.get("use_structural_attention", False))
 STRUCTURAL_ATTENTION_WEIGHT: float = float(META_CONFIG.get("structural_attention_weight", 0.2))
@@ -174,6 +178,13 @@ def set_ignore_memory_shape_constraint(value: bool) -> None:
     META_CONFIG["ignore_memory_shape_constraint"] = value
 
 
+def set_zone_persistence_policy(value: str) -> None:
+    """Override zone persistence policy at runtime."""
+    global ZONE_PERSISTENCE_POLICY
+    ZONE_PERSISTENCE_POLICY = value
+    META_CONFIG["zone_persistence_policy"] = value
+
+
 def set_memory_reliability_threshold(value: float) -> None:
     """Override memory reliability filter threshold."""
     global MEMORY_RELIABILITY_THRESHOLD
@@ -194,6 +205,14 @@ def print_runtime_config() -> None:
     print("Runtime configuration:")
     for k, v in info.items():
         print(f"  {k}: {v}")
+
+
+def get_runtime_config() -> Dict[str, Any]:
+    """Return a dictionary snapshot of key runtime settings."""
+    return {
+        "ZONE_COVERAGE_THRESHOLD": ZONE_COVERAGE_THRESHOLD,
+        "ZONE_PERSISTENCE_POLICY": ZONE_PERSISTENCE_POLICY,
+    }
 
 
 def print_system_health(memory_loaded: int, memory_skipped: int) -> None:
