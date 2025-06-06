@@ -44,10 +44,7 @@ def build_trace(
                 logger.debug("cell %d,%d changed from %s to %s", r, c, grid_in.get(r, c), grid_out.get(r, c))
 
     if grid_true is not None and grid_true.shape() == grid_out.shape():
-        delta_mask = [
-            [grid_out.get(r, c) != grid_true.get(r, c) for c in range(width)]
-            for r in range(height)
-        ]
+        delta_mask = grid_out.structural_diff(grid_true)
         match_score = grid_out.compare_to(grid_true)
     else:
         delta_mask = [[False for _ in range(width)] for _ in range(height)]

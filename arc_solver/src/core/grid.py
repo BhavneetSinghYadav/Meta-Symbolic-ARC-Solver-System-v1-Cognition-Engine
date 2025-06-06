@@ -176,6 +176,19 @@ class Grid:
             score = 1.0
         return score
 
+    def structural_diff(self, other: "Grid") -> List[List[bool]]:
+        """Return a mask marking cell mismatches with ``other``."""
+        h1, w1 = self.shape()
+        h2, w2 = other.shape()
+        mask: List[List[bool]] = [[True for _ in range(w1)] for _ in range(h1)]
+        for r in range(h1):
+            for c in range(w1):
+                if r >= h2 or c >= w2:
+                    mask[r][c] = True
+                else:
+                    mask[r][c] = self.get(r, c) != other.get(r, c)
+        return mask
+
     def __repr__(self) -> str:
         return f"Grid(shape={self.shape()})"
 
