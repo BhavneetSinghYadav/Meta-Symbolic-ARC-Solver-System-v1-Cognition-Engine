@@ -26,4 +26,4 @@ regime_thresholds:
   entropy_low: 0.1
   zone_alignment_cutoff: 0.3
   symmetry_cutoff: 0.5
-zone_coverage_threshold: 0.6
+zone_coverage_threshold: 0.65
