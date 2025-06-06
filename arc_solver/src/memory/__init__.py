@@ -9,6 +9,7 @@ from .memory_store import (
     get_best_memory_match,
     extract_task_constraints,
     get_last_load_stats,
+    update_memory_stats,
     preload_memory_from_kaggle_input,
 )
 
@@ -21,6 +22,7 @@ __all__ = [
     "get_best_memory_match",
     "extract_task_constraints",
     "get_last_load_stats",
+    "update_memory_stats",
     "preload_memory_from_kaggle_input",
 ]
 

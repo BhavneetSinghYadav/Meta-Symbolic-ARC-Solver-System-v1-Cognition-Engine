@@ -57,6 +57,9 @@ LAZY_MEMORY_LOADING: bool = bool(META_CONFIG.get("lazy_memory", False))
 MEMORY_SIMILARITY_THRESHOLD: float = float(
     META_CONFIG.get("memory_similarity_threshold", 0.95)
 )
+MEMORY_RELIABILITY_THRESHOLD: float = float(
+    META_CONFIG.get("memory_reliability_threshold", 0.75)
+)
 MEMORY_DIAGNOSTICS: bool = bool(META_CONFIG.get("memory_diagnostics", False))
 SPARSE_MODE: bool = bool(META_CONFIG.get("sparse_mode", False))
 FALLBACK_ON_ABSTRACTION_FAIL: bool = bool(
@@ -169,6 +172,13 @@ def set_ignore_memory_shape_constraint(value: bool) -> None:
     global IGNORE_MEMORY_SHAPE_CONSTRAINT
     IGNORE_MEMORY_SHAPE_CONSTRAINT = value
     META_CONFIG["ignore_memory_shape_constraint"] = value
+
+
+def set_memory_reliability_threshold(value: float) -> None:
+    """Override memory reliability filter threshold."""
+    global MEMORY_RELIABILITY_THRESHOLD
+    MEMORY_RELIABILITY_THRESHOLD = value
+    META_CONFIG["memory_reliability_threshold"] = value
 
 
 def print_runtime_config() -> None:

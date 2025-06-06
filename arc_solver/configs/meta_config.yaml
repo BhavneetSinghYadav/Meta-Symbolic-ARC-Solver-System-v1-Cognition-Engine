@@ -18,6 +18,7 @@ use_structural_attention: true
 structural_attention_weight: 0.2
 lazy_memory: false
 memory_similarity_threshold: 0.80
+memory_reliability_threshold: 0.75
 memory_diagnostics: true
 ignore_memory_shape_constraint: true
 sparse_mode: false
