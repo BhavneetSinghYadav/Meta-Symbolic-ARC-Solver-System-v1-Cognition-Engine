@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from arc_solver.src.core.grid import Grid
-from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.symbolic.vocabulary import (
     Symbol,
     SymbolType,
@@ -67,6 +66,7 @@ class RuleTraceEntry:
 
 def trace_prediction(rule_set: List[SymbolicRule], input_grid: Grid) -> List[RuleTraceEntry]:
     """Apply ``rule_set`` sequentially and record rule activations."""
+    from arc_solver.src.executor.simulator import simulate_rules
     grid = Grid([row[:] for row in input_grid.data])
     traces: List[RuleTraceEntry] = []
     for i, rule in enumerate(rule_set):
@@ -204,6 +204,7 @@ def evaluate_repair_candidates(
     candidates: List[SymbolicRule], input_grid: Grid, target: Grid
 ) -> SymbolicRule:
     """Return the candidate yielding the highest similarity."""
+    from arc_solver.src.executor.simulator import simulate_rules
     best = candidates[0]
     best_score = -1.0
     for rule in candidates:
@@ -222,6 +223,8 @@ def run_meta_repair(
     rules: List[SymbolicRule],
 ) -> Tuple[Grid, List[SymbolicRule]]:
     """Return improved prediction and rule set via discrepancy mining."""
+
+    from arc_solver.src.executor.simulator import simulate_rules
 
     original_score = predicted.compare_to(ground_truth)
     discrepancy = compute_discrepancy(predicted, ground_truth)
