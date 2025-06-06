@@ -98,6 +98,84 @@ class Grid:
                     matches += 1
         return matches / total if total else 1.0
 
+    def diff_summary(self, other: "Grid") -> Dict[str, Any]:
+        """Return a structured diff between this grid and ``other``."""
+        if self.shape() != other.shape():
+            return {
+                "cell_match_ratio": 0.0,
+                "zone_coverage_match": 0.0,
+                "symbol_mismatch_count": 0,
+                "rotation_discrepancy": False,
+            }
+
+        h, w = self.shape()
+        matches = 0
+        zone_total = 0
+        zone_matches = 0
+        symbol_mismatches = 0
+
+        def _zone(sym: Any) -> Optional[str]:
+            if sym is None:
+                return None
+            if isinstance(sym, list):
+                for s in sym:
+                    if getattr(s, "type", None).__str__() == "ZONE":
+                        return str(s.value)
+                return None
+            if getattr(sym, "type", None).__str__() == "ZONE":
+                return str(getattr(sym, "value", None))
+            return None
+
+        for r in range(h):
+            for c in range(w):
+                a = self.get(r, c)
+                b = other.get(r, c)
+                if a == b:
+                    matches += 1
+
+                z_a = _zone(self.overlay[r][c]) if self.overlay else None
+                z_b = _zone(other.overlay[r][c]) if other.overlay else None
+                if z_a is not None or z_b is not None:
+                    zone_total += 1
+                    if z_a == z_b:
+                        zone_matches += 1
+
+                if self.overlay and other.overlay:
+                    sym_a = self.overlay[r][c]
+                    sym_b = other.overlay[r][c]
+                    if sym_a is not None and sym_b is not None and type(sym_a) != type(sym_b):
+                        symbol_mismatches += 1
+
+        cell_ratio = matches / (h * w) if h * w else 1.0
+        zone_ratio = zone_matches / zone_total if zone_total else 1.0
+
+        rotation_discrepancy = False
+        try:
+            if any(self.rotate90(k).data == other.data for k in range(1, 4)):
+                rotation_discrepancy = True
+        except Exception:
+            rotation_discrepancy = False
+
+        return {
+            "cell_match_ratio": cell_ratio,
+            "zone_coverage_match": zone_ratio,
+            "symbol_mismatch_count": symbol_mismatches,
+            "rotation_discrepancy": rotation_discrepancy,
+        }
+
+    def detailed_score(self, other: "Grid") -> float:
+        """Return weighted similarity score accounting for symbolic context."""
+        diff = self.diff_summary(other)
+        score = diff["cell_match_ratio"] * 0.6 + diff["zone_coverage_match"] * 0.3
+        score -= diff["symbol_mismatch_count"] * 0.02
+        if diff["rotation_discrepancy"]:
+            score -= 0.1
+        if score < 0.0:
+            score = 0.0
+        if score > 1.0:
+            score = 1.0
+        return score
+
     def __repr__(self) -> str:
         return f"Grid(shape={self.shape()})"
 

@@ -8,6 +8,7 @@ from arc_solver.src.abstractions.abstractor import abstract
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.symbolic.rule_language import rule_to_dsl
 from arc_solver.src.core.grid import Grid
+from arc_solver.src.scoring.diff_penalty import SymbolicDiffPenaltyEngine
 
 
 def load_first_pair(task_path: Path) -> tuple[str, Grid, Grid]:
@@ -32,6 +33,7 @@ def process_task(task_path: Path, trace: bool = False) -> Dict[str, Any]:
     """Run MGEL on ``task_path`` and return the best rule result."""
     task_id, inp, tgt = load_first_pair(task_path)
     programs = abstract([inp, tgt])
+    engine = SymbolicDiffPenaltyEngine()
     best: Dict[str, Any] | None = None
     best_score = -1.0
 
@@ -40,7 +42,7 @@ def process_task(task_path: Path, trace: bool = False) -> Dict[str, Any]:
             pred = simulate_rules(inp, [rule])
         except Exception:
             continue
-        score = pred.compare_to(tgt)
+        score, diff = engine.score(pred, tgt)
         metrics: Dict[str, Any] = {}
         if trace:
             try:
@@ -59,6 +61,7 @@ def process_task(task_path: Path, trace: bool = False) -> Dict[str, Any]:
             "grid_pred": pred.data,
             "trace_summary": metrics,
             "grid_diff": diff_grid(pred, tgt),
+            "diff_summary": diff,
         }
         if score > best_score:
             best = result
