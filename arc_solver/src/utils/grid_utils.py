@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Tuple
+import math
 
 from arc_solver.src.core.grid import Grid
 
@@ -49,4 +50,17 @@ def validate_grid(grid: Grid, expected_shape: Tuple[int, int] | None = None) -> 
     return True
 
 
-__all__ = ["rotate", "validate_grid"]
+def compute_grid_entropy(grid: Grid) -> float:
+    """Return the Shannon entropy of the color distribution in ``grid``."""
+    counts = grid.count_colors()
+    total = sum(counts.values())
+    ent = 0.0
+    for v in counts.values():
+        if v == 0:
+            continue
+        p = v / total
+        ent -= p * math.log2(p)
+    return ent
+
+
+__all__ = ["rotate", "validate_grid", "compute_grid_entropy"]
