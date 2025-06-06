@@ -127,10 +127,28 @@ def assign_zone_labels(grid: Grid, zones: Dict[Tuple[int, int], Symbol]) -> List
     return overlay
 
 
+def expand_zone_overlay(
+    overlay: List[List[Optional[Symbol]]], label: str
+) -> List[List[Optional[Symbol]]]:
+    """Return ``overlay`` with ``label`` dilated by one cell."""
+    height = len(overlay)
+    width = len(overlay[0]) if height else 0
+    expanded = [row[:] for row in overlay]
+    for r in range(height):
+        for c in range(width):
+            if overlay[r][c] is not None and overlay[r][c].value == label:
+                for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    nr, nc = r + dr, c + dc
+                    if 0 <= nr < height and 0 <= nc < width and expanded[nr][nc] is None:
+                        expanded[nr][nc] = Symbol(SymbolType.ZONE, label)
+    return expanded
+
+
 __all__ = [
     "segment_fixed_zones",
     "segment_connected_regions",
     "assign_zone_labels",
     "zone_overlay",
     "label_connected_regions",
+    "expand_zone_overlay",
 ]

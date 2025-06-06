@@ -20,3 +20,17 @@ def test_replace_zone_condition():
     for r in range(3):
         for c in range(3):
             assert pred.get(r, c) == 1
+
+
+def test_zone_expansion_fallback():
+    grid = Grid([[1, 1], [1, 1]])
+    rule = SymbolicRule(
+        transformation=Transformation(TransformationType.REPLACE),
+        source=[Symbol(SymbolType.COLOR, "1")],
+        target=[Symbol(SymbolType.COLOR, "2")],
+        condition={"zone": "Missing"},
+    )
+    pred = simulate_rules(grid, [rule])
+    for r in range(2):
+        for c in range(2):
+            assert pred.get(r, c) == 1

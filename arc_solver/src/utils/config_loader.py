@@ -46,6 +46,8 @@ PRIOR_FROM_MEMORY: bool = bool(_PRIOR_CONF.get("inject_from_memory", False))
 PRIOR_FALLBACK_ONLY: bool = bool(_PRIOR_CONF.get("fallback_only", False))
 PRIOR_MAX_INJECT: int = int(_PRIOR_CONF.get("max_inject", 3))
 
+ZONE_COVERAGE_THRESHOLD: float = float(META_CONFIG.get("zone_coverage_threshold", 0.6))
+
 USE_STRUCTURAL_ATTENTION: bool = bool(META_CONFIG.get("use_structural_attention", False))
 STRUCTURAL_ATTENTION_WEIGHT: float = float(META_CONFIG.get("structural_attention_weight", 0.2))
 
