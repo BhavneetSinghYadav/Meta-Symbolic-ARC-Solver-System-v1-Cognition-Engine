@@ -3,6 +3,8 @@ from __future__ import annotations
 """High level ARC task solving pipeline."""
 
 from typing import List, Tuple
+import json
+from pathlib import Path
 
 from arc_solver.src.abstractions.abstractor import abstract
 from arc_solver.src.abstractions.rule_generator import (
@@ -41,9 +43,13 @@ from arc_solver.src.introspection import (
     llm_refine_program,
     evaluate_refinements,
     run_meta_repair,
+    validate_trace,
+    trace_prediction,
 )
 from arc_solver.src.symbolic import rules_to_program
 from arc_solver.src.utils import config_loader
+
+_FAILURE_LOG = Path("logs/failure_log.json")
 
 
 def solve_task(
@@ -341,17 +347,53 @@ def solve_task(
             save_rule_program(
                 task_id, signature, best_rules, score, constraints=constraints
             )
+    final_score = None
     if logger:
         logger.info("final rules: %s", rules_to_program(best_rules))
         if test_outputs:
             try:
-                score = sum(
-                    p.compare_to(o)
-                    for p, o in zip(predictions, test_outputs)
+                final_score = sum(
+                    p.compare_to(o) for p, o in zip(predictions, test_outputs)
                 ) / len(test_outputs)
-                logger.debug(f"[{task_id}] Final prediction score: {score:.3f}")
+                logger.debug(
+                    f"[{task_id}] Final prediction score: {final_score:.3f}"
+                )
             except Exception:
                 pass
+
+    if final_score is not None and final_score < 0.2:
+        if logger:
+            logger.warning(
+                f"score {final_score:.2f} below threshold; using regression guard"
+            )
+        trace_dump = []
+        if train_pairs and best_rules:
+            inp0, out0 = train_pairs[0]
+            for entry in trace_prediction(best_rules, inp0):
+                t = build_trace(entry.rule, entry.before, entry.after, out0)
+                metrics = validate_trace(t)
+                trace_dump.append(
+                    {
+                        "rule": str(entry.rule),
+                        "metrics": metrics,
+                        "context": t.symbolic_context,
+                    }
+                )
+        try:
+            data = []
+            if _FAILURE_LOG.exists():
+                data = json.loads(_FAILURE_LOG.read_text())
+            data.append({
+                "task_id": task_id,
+                "score": final_score,
+                "trace": trace_dump,
+            })
+            _FAILURE_LOG.parent.mkdir(parents=True, exist_ok=True)
+            _FAILURE_LOG.write_text(json.dumps(data, indent=2))
+        except Exception as exc:
+            if logger:
+                logger.error("failed to write failure log: %s", exc)
+        predictions = [fallback_predict(g) for g in test_inputs]
 
     return predictions, test_outputs, traces, best_rules
 
