@@ -22,6 +22,17 @@ from .self_repair import (
     RuleTraceEntry,
     FaultHypothesis,
 )
+from arc_solver.src.symbolic.rule_language import rule_to_dsl
+
+
+def suggest_fix_from_trace(trace: RuleTrace) -> str:
+    """Return DSL suggestion to repair ``trace.rule`` based on mismatches."""
+
+    if trace.ground_truth is None:
+        return ""
+    discrepancy = compute_discrepancy(trace.predicted_grid, trace.ground_truth)
+    fix = refine_rule(trace.rule, discrepancy)
+    return rule_to_dsl(fix) if fix else ""
 
 __all__ = [
     "RuleTrace",
@@ -42,4 +53,5 @@ __all__ = [
     "run_meta_repair",
     "RuleTraceEntry",
     "FaultHypothesis",
+    "suggest_fix_from_trace",
 ]

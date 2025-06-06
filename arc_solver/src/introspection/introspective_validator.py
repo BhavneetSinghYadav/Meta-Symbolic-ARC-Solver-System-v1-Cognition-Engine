@@ -9,6 +9,9 @@ symbolic region and if any semantic conflicts occurred during execution.
 from __future__ import annotations
 
 from typing import Any, Dict, List
+import math
+
+from arc_solver.src.core.grid import Grid
 
 from .trace_builder import RuleTrace
 
@@ -79,6 +82,26 @@ def validate_trace(trace: RuleTrace) -> Dict[str, Any]:
         coverage_score >= 0.99 and symbolic_consistency and not conflict_flags
     )
 
+    def _grid_entropy(grid: Grid) -> float:
+        counts = grid.count_colors()
+        total = sum(counts.values())
+        ent = 0.0
+        for v in counts.values():
+            if v == 0:
+                continue
+            p = v / total
+            ent -= p * math.log2(p)
+        return ent
+
+    entropy_change = 0.0
+    if trace.ground_truth is not None:
+        try:
+            entropy_pred = _grid_entropy(trace.predicted_grid)
+            entropy_true = _grid_entropy(trace.ground_truth)
+            entropy_change = entropy_true - entropy_pred
+        except Exception:
+            entropy_change = 0.0
+
     return {
         "coverage_score": coverage_score,
         "correct_cells": correct_cells,
@@ -86,6 +109,7 @@ def validate_trace(trace: RuleTrace) -> Dict[str, Any]:
         "symbolic_consistency": symbolic_consistency,
         "conflict_flags": conflict_flags,
         "interpretation_valid": interpretation_valid,
+        "entropy_change": entropy_change,
     }
 
 
