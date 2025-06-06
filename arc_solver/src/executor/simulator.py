@@ -415,6 +415,8 @@ def simulate_rules(
                     write_log[(r, c)].append(idx)
                     write_vals[(r, c)].append(after_val)
                     changed.append((r, c, before_val, after_val))
+        if logger and not changed:
+            logger.info("Rule had no effect")
         if zone:
             overlay = zone_overlay(grid)
             zone_cells = [
@@ -425,6 +427,8 @@ def simulate_rules(
             ]
             coverage = len(changed) / len(zone_cells) if zone_cells else 0.0
             rule.meta["zone_coverage_ratio"] = coverage
+            if logger and 0 < coverage < 1.0:
+                logger.info(f"Rule partially applied: coverage={coverage:.2f}")
             if coverage < config_loader.ZONE_COVERAGE_THRESHOLD:
                 alt = SymbolicRule(
                     transformation=rule.transformation,
@@ -448,9 +452,14 @@ def simulate_rules(
                     rule = alt
         if trace_log is not None:
             trace_log.append({"rule_id": idx, "zone": rule.condition.get("zone"), "effect": changed})
+        if logger and zone:
+            zone_miss = len(zone_cells) - len(changed)
+            if zone_miss > 0:
+                logger.info(f"Zone mismatch count: {zone_miss}")
         grid = tentative
 
     policy = conflict_policy or CONFLICT_POLICY
+    conflict_count = 0
     for loc, writers in write_log.items():
         if len(writers) > 1:
             if logger:
@@ -461,6 +470,10 @@ def simulate_rules(
                 grid.set(loc[0], loc[1], vals[0])
             elif policy == "most_frequent":
                 grid.set(loc[0], loc[1], Counter(vals).most_common(1)[0][0])
+            conflict_count += 1
+
+    if logger and conflict_count:
+        logger.info(f"Conflicting writes: {conflict_count}")
 
     if not validate_grid(grid, expected_shape=input_grid.shape()):
         if logger:

@@ -10,6 +10,7 @@ from .compositional import (
     justify_selection,
     run_pipeline,
 )
+from .diff_penalty import SymbolicDiffPenaltyEngine
 
 __all__ = [
     "RuleInfo",
@@ -20,4 +21,5 @@ __all__ = [
     "compose_programs",
     "justify_selection",
     "run_pipeline",
+    "SymbolicDiffPenaltyEngine",
 ]

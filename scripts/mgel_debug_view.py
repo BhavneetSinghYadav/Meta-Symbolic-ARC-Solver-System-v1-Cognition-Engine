@@ -217,7 +217,9 @@ def main() -> None:
         try:
             pred_grid = simulate_rules(input_grid, [rule])
             print_grid("Predicted Grid", pred_grid, use_color=args.color)
-            score = pred_grid.compare_to(target_grid)
+            from arc_solver.src.scoring.diff_penalty import SymbolicDiffPenaltyEngine
+            engine = SymbolicDiffPenaltyEngine()
+            score, diff = engine.score(pred_grid, target_grid)
             print(f"\u2705 Prediction Score: {score:.3f}")
             print_grid_diff(pred_grid, target_grid, use_color=args.color)
             metrics = {}
@@ -245,6 +247,7 @@ def main() -> None:
                 "grid_target": target_grid.data,
                 "trace_summary": metrics if metrics else {},
                 "grid_diff": diff_grid,
+                "diff_summary": diff,
             }
             if score > best_score:
                 best_result = candidate

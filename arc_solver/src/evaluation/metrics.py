@@ -12,6 +12,11 @@ def accuracy_score(predicted: Grid, target: Grid) -> float:
     return predicted.compare_to(target)
 
 
+def symbolic_accuracy_score(predicted: Grid, target: Grid) -> float:
+    """Return pattern-aware accuracy using :meth:`Grid.detailed_score`."""
+    return predicted.detailed_score(target)
+
+
 def task_score(preds: List[Grid], targets: List[Grid]) -> float:
     """Return the proportion of grids predicted exactly."""
     if not preds or not targets:
@@ -27,4 +32,9 @@ def aggregate_accuracy(task_scores: List[float]) -> float:
     """Return mean accuracy over multiple tasks."""
     return sum(task_scores) / len(task_scores) if task_scores else 0.0
 
-__all__ = ["accuracy_score", "task_score", "aggregate_accuracy"]
+__all__ = [
+    "accuracy_score",
+    "task_score",
+    "aggregate_accuracy",
+    "symbolic_accuracy_score",
+]
