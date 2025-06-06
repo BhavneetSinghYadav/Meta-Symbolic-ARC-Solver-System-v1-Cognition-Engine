@@ -3,3 +3,4 @@ PyYAML
 matplotlib
 numpy
 scikit-learn
+scikit-image
