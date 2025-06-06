@@ -11,6 +11,7 @@ import logging
 from typing import Dict, List, Tuple, Optional
 
 from arc_solver.src.core.grid import Grid
+from arc_solver.src.utils.grid_utils import compute_grid_entropy
 from arc_solver.src.segment.segmenter import zone_overlay
 from arc_solver.src.abstractions.abstractor import _find_translation
 from arc_solver.src.utils import config_loader
@@ -32,15 +33,8 @@ _SIGNATURE_INDEX = Path("logs/task_signature_index.json")
 
 
 def _grid_entropy(grid: Grid) -> float:
-    counts = grid.count_colors()
-    total = sum(counts.values())
-    ent = 0.0
-    for v in counts.values():
-        if v == 0:
-            continue
-        p = v / total
-        ent -= p * math.log2(p)
-    return ent
+    """Alias for :func:`compute_grid_entropy` (for backward compatibility)."""
+    return compute_grid_entropy(grid)
 
 
 def compute_task_signature(
