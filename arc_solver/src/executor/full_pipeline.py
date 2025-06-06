@@ -34,6 +34,7 @@ from arc_solver.src.memory.deep_prior_loader import (
     match_task_signature_to_prior,
     select_motifs,
 )
+from arc_solver.src.introspection.visual_scoring import rerank_by_visual_score
 from arc_solver.src.meta_generalizer import generalize_rule_program
 from arc_solver.src.symbolic.rule_language import parse_rule
 from arc_solver.src.executor.fallback_predictor import predict as fallback_predict
@@ -258,6 +259,12 @@ def solve_task(
         if logger:
             logger.info(f"candidate {rules_to_program(rs)} score={base:.3f}")
     prioritized = prioritize(candidate_sets, scores)
+    if prioritized and train_pairs:
+        prioritized = rerank_by_visual_score(
+            prioritized,
+            train_pairs[0][0],
+            train_pairs[0][1],
+        ) or prioritized
     if prioritized:
         best_rules = prioritized[0]
     if logger:

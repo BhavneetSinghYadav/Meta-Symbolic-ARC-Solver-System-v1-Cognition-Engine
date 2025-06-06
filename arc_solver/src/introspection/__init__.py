@@ -22,6 +22,7 @@ from .self_repair import (
     RuleTraceEntry,
     FaultHypothesis,
 )
+from .visual_scoring import compute_visual_score, rerank_by_visual_score
 from arc_solver.src.symbolic.rule_language import rule_to_dsl
 
 
@@ -53,5 +54,7 @@ __all__ = [
     "run_meta_repair",
     "RuleTraceEntry",
     "FaultHypothesis",
+    "compute_visual_score",
+    "rerank_by_visual_score",
     "suggest_fix_from_trace",
 ]
