@@ -43,14 +43,29 @@ def process_task(task_path: Path, trace: bool = False) -> Dict[str, Any]:
         except Exception:
             continue
         score, diff = engine.score(pred, tgt)
-        metrics: Dict[str, Any] = {}
+        trace_details: Dict[str, Any] = {}
+        fix_suggestion = ""
         if trace:
             try:
-                from arc_solver.src.introspection import build_trace, validate_trace
+                from arc_solver.src.introspection import (
+                    build_trace,
+                    validate_trace,
+                    suggest_fix_from_trace,
+                )
 
                 trace_obj = build_trace(rule, inp, pred, tgt)
                 metrics = validate_trace(trace_obj)
+                trace_details = {
+                    "coverage": metrics.get("coverage_score"),
+                    "conflicts": metrics.get("conflict_flags"),
+                    "entropy_delta": metrics.get("entropy_change"),
+                }
+                try:
+                    fix_suggestion = suggest_fix_from_trace(trace_obj)
+                except Exception:
+                    fix_suggestion = ""
             except Exception:
+                trace_details = {}
                 metrics = {}
         result = {
             "task_id": task_id,
@@ -59,10 +74,17 @@ def process_task(task_path: Path, trace: bool = False) -> Dict[str, Any]:
             "grid_input": inp.data,
             "grid_target": tgt.data,
             "grid_pred": pred.data,
-            "trace_summary": metrics,
+            "trace": trace_details,
             "grid_diff": diff_grid(pred, tgt),
             "diff_summary": diff,
         }
+        if fix_suggestion:
+            result["llm_fix"] = fix_suggestion
+        if trace_details:
+            if score < 0.5 and "zone_miss" in trace_details.get("conflicts", []):
+                result["failure_type"] = "zone overfit"
+            elif "shape_mismatch" in trace_details.get("conflicts", []):
+                result["failure_type"] = "shape logic error"
         if score > best_score:
             best = result
             best_score = score
