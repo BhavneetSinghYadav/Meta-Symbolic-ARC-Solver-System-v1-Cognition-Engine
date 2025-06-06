@@ -8,6 +8,7 @@ import numpy as np
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
+from arc_solver.src.search.feature_mapper import rule_feature_vector
 
 TEMPERATURE = 1.0
 
@@ -35,7 +36,8 @@ def probabilistic_rank_rule_sets(
     scored: List[Tuple[List, float]] = []
     for rules in rule_sets:
         score = _score_rules(rules, pairs)
-        scored.append((rules, score))
+        feat_bonus = sum(sum(rule_feature_vector(r)) for r in rules)
+        scored.append((rules, score + 0.1 * feat_bonus))
     scored.sort(key=lambda x: x[1], reverse=True)
 
     scores = np.array([s for _, s in scored])

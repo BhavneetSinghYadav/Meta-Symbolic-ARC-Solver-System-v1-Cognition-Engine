@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Dict, List, Set
 
 from arc_solver.src.symbolic.vocabulary import (
@@ -25,6 +25,39 @@ class RuleDependencyGraph:
                 if has_conflict(r1, r2):
                     self.edges[i].add(j)
                     self.edges[j].add(i)
+
+def rule_dependency_graph(rules: List[SymbolicRule]) -> Dict[int, Set[int]]:
+    """Return a directed dependency graph between rules."""
+    graph: Dict[int, Set[int]] = defaultdict(set)
+    for i, r1 in enumerate(rules):
+        targets = {s.value for s in r1.target if s.type is SymbolType.COLOR}
+        for j, r2 in enumerate(rules):
+            if i == j:
+                continue
+            sources = {s.value for s in r2.source if s.type is SymbolType.COLOR}
+            if targets & sources:
+                graph[i].add(j)
+    return graph
+
+
+def sort_rules_by_dependency(rules: List[SymbolicRule]) -> List[SymbolicRule]:
+    """Return ``rules`` sorted by dependency order."""
+    graph = rule_dependency_graph(rules)
+    indegree: Dict[int, int] = {i: 0 for i in range(len(rules))}
+    for deps in graph.values():
+        for j in deps:
+            indegree[j] += 1
+    queue = deque([i for i, d in indegree.items() if d == 0])
+    order: List[int] = []
+    while queue:
+        i = queue.popleft()
+        order.append(i)
+        for j in graph.get(i, set()):
+            indegree[j] -= 1
+            if indegree[j] == 0:
+                queue.append(j)
+    order.extend(i for i in range(len(rules)) if i not in order)
+    return [rules[i] for i in order]
 
 
 def _extract_color(rule: SymbolicRule) -> str | None:
@@ -63,4 +96,10 @@ def select_independent_rules(rules: List[SymbolicRule]) -> List[SymbolicRule]:
     return chosen
 
 
-__all__ = ["RuleDependencyGraph", "has_conflict", "select_independent_rules"]
+__all__ = [
+    "RuleDependencyGraph",
+    "has_conflict",
+    "select_independent_rules",
+    "rule_dependency_graph",
+    "sort_rules_by_dependency",
+]

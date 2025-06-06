@@ -18,6 +18,7 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationType,
 )
 from arc_solver.src.segment.segmenter import zone_overlay
+from arc_solver.src.executor.dependency import sort_rules_by_dependency
 from arc_solver.src.utils.grid_utils import validate_grid
 
 
@@ -361,6 +362,10 @@ def _safe_apply_rule(
         if breaks_training_constraint(after):
             raise ReflexOverrideException("Training constraint mismatch")
 
+    if before.compare_to(after) == 1.0:
+        logger.debug(f"Rule had no effect: {rule}")
+        return grid
+
     return after
 
 
@@ -375,6 +380,7 @@ def simulate_rules(
     conflict_policy: str | None = None,
 ) -> Grid:
     """Apply a list of symbolic rules to ``input_grid`` with reflex checks."""
+    rules = sort_rules_by_dependency(rules)
     grid = Grid([row[:] for row in input_grid.data])
     h, w = grid.shape()
     if uncertainty_grid is None:
@@ -387,7 +393,9 @@ def simulate_rules(
             colors = sorted({v for row in grid.data for v in row})
             logger.info(f"Applying rule {idx}: {rule}")
             logger.debug(f"Grid shape={grid.shape()}, colors={colors}")
-        if not validate_rule_application(rule, grid):
+        valid = validate_rule_application(rule, grid)
+        zone = rule.condition.get("zone") if rule.condition else None
+        if not valid:
             if logger:
                 logger.warning(f"Skipping rule due to invalid context: {rule}")
             continue
@@ -407,6 +415,37 @@ def simulate_rules(
                     write_log[(r, c)].append(idx)
                     write_vals[(r, c)].append(after_val)
                     changed.append((r, c, before_val, after_val))
+        if zone:
+            overlay = zone_overlay(grid)
+            zone_cells = [
+                (r, c)
+                for r in range(h)
+                for c in range(w)
+                if overlay[r][c] is not None and overlay[r][c].value == zone
+            ]
+            coverage = len(changed) / len(zone_cells) if zone_cells else 0.0
+            rule.meta["zone_coverage_ratio"] = coverage
+            if coverage < config_loader.ZONE_COVERAGE_THRESHOLD:
+                alt = SymbolicRule(
+                    transformation=rule.transformation,
+                    source=rule.source,
+                    target=rule.target,
+                    nature=rule.nature,
+                    condition={k: v for k, v in rule.condition.items() if k != "zone"},
+                    meta=rule.meta,
+                )
+                tentative_alt = check_symmetry_break(alt, grid, attention_mask)
+                changed_alt: list[tuple[int, int, int, int]] = []
+                for r in range(h):
+                    for c in range(w):
+                        b = grid.get(r, c)
+                        a = tentative_alt.get(r, c)
+                        if b != a:
+                            changed_alt.append((r, c, b, a))
+                if len(changed_alt) > len(changed):
+                    tentative = tentative_alt
+                    changed = changed_alt
+                    rule = alt
         if trace_log is not None:
             trace_log.append({"rule_id": idx, "zone": rule.condition.get("zone"), "effect": changed})
         grid = tentative
