@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import List
 
 from arc_solver.src.core.grid import Grid
-from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.symbolic import (
     Symbol,
     SymbolType,
@@ -153,6 +152,8 @@ def llm_refine_program(trace: RuleTrace, feedback: FeedbackSignal) -> List[Symbo
 
 def evaluate_refinements(rules: List[SymbolicRule], grid_in: Grid, grid_out: Grid) -> SymbolicRule:
     """Return the candidate rule with the highest score."""
+
+    from arc_solver.src.executor.simulator import simulate_rules
 
     best_rule = rules[0]
     best_score = -1.0

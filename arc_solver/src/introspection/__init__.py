@@ -3,7 +3,7 @@
 
 from .trace_builder import RuleTrace, build_trace
 from .symbolic_trace import SymbolicTrace
-from .introspective_validator import validate_trace
+from .validate_trace import validate_trace
 from .narrator_llm import narrate_trace
 from .refinement import (
     FeedbackSignal,
