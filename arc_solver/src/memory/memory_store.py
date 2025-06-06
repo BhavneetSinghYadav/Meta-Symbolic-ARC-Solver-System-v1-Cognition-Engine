@@ -137,11 +137,23 @@ def save_rule_program(
 ) -> None:
     """Append a rule program entry to the memory store."""
     memory = load_memory(path)
+    reliability = 1.0
+    if rules:
+        try:
+            reliability = min(
+                r.meta.get("rule_reliability", 1.0) for r in rules
+            )
+        except Exception:
+            reliability = 1.0
     entry = {
         "task_id": task_id,
         "signature": signature,
         "rules": [rule_to_dsl(r) for r in rules],
         "score": score,
+        "reliability": reliability,
+        "uses": 0,
+        "failures": 0,
+        "reflex_errors": 0,
     }
     if constraints is not None:
         entry["constraints"] = constraints
@@ -266,6 +278,17 @@ def match_signature(
                     continue
             filtered.append(entry)
         candidates = filtered
+    reliability_threshold = config_loader.MEMORY_RELIABILITY_THRESHOLD
+    candidates = [
+        c
+        for c in candidates
+        if c.get("reliability", 1.0) >= reliability_threshold
+        and c.get("reflex_errors", 0) == 0
+        and not (
+            c.get("uses", 0) >= 3
+            and c.get("failures", 0) / max(c.get("uses", 1), 1) > 0.6
+        )
+    ]
     parsed_candidates: List[Dict[str, Any]] = []
     for entry in candidates:
         parsed_rules = []
@@ -295,6 +318,40 @@ __all__ = [
     "extract_task_constraints",
     "get_last_load_stats",
 ]
+
+
+def update_memory_stats(
+    task_id: str,
+    coverage_score: float,
+    *,
+    reflex_error: bool = False,
+    path: str | Path = _DEFAULT_PATH,
+) -> None:
+    """Update usage statistics for a stored program and prune if needed."""
+    memory = load_memory(path)
+    updated: List[Dict[str, Any]] = []
+    for entry in memory:
+        if entry.get("task_id") == task_id:
+            entry["uses"] = entry.get("uses", 0) + 1
+            if coverage_score < 0.3:
+                entry["failures"] = entry.get("failures", 0) + 1
+            if reflex_error:
+                entry["reflex_errors"] = entry.get("reflex_errors", 0) + 1
+        updated.append(entry)
+    pruned: List[Dict[str, Any]] = []
+    for entry in updated:
+        if entry.get("reflex_errors", 0) > 0:
+            continue
+        uses = entry.get("uses", 0)
+        fails = entry.get("failures", 0)
+        if uses >= 3 and fails / max(uses, 1) > 0.6:
+            continue
+        pruned.append(entry)
+    with Path(path).open("w", encoding="utf-8") as f:
+        json.dump(pruned, f)
+
+
+__all__.append("update_memory_stats")
 
 
 def preload_memory_from_kaggle_input() -> None:
