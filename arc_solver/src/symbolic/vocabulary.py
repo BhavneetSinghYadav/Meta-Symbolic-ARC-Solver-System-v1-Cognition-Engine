@@ -146,6 +146,34 @@ class SymbolicRule:
             return False
         return True
 
+    def apply(self, grid: "Grid") -> "Grid":
+        """Return grid after applying this rule without strict checks."""
+        from arc_solver.src.executor.simulator import safe_apply_rule
+
+        return safe_apply_rule(self, grid, perform_checks=False)
+
+    def triggers_large_conflict(
+        self, conflict_map: list[list[int]], radius: int = 2
+    ) -> bool:
+        """Return True if conflict region exceeds ``radius`` heuristically."""
+        points = [
+            (r, c)
+            for r, row in enumerate(conflict_map)
+            for c, v in enumerate(row)
+            if v
+        ]
+        if not points:
+            return False
+        rmin = min(p[0] for p in points)
+        rmax = max(p[0] for p in points)
+        cmin = min(p[1] for p in points)
+        cmax = max(p[1] for p in points)
+        if (rmax - rmin) > radius or (cmax - cmin) > radius:
+            return True
+        if len(points) > (radius + 1) ** 2:
+            return True
+        return False
+
 
 __all__ = [
     "SymbolType",

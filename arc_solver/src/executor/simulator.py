@@ -549,8 +549,47 @@ def simulate_symbolic_program(grid: Grid, rules: List[SymbolicRule]) -> Grid:
     return simulate_rules(grid, rules)
 
 
+def simulate_rules_with_softmask(input_grid, rules, config=None):
+    from arc_solver.src.core.grid_utils import compute_conflict_map
+
+    config = config or {}
+    max_conflict_radius = config.get("MAX_CONFLICT_RADIUS", 2)
+
+    working_grid = Grid([row[:] for row in input_grid.data])
+    h, w = working_grid.shape()
+    propagation: list[list[int]] = [[0 for _ in range(w)] for _ in range(h)]
+    applied_rules = []
+
+    for rule in rules:
+        try:
+            pred_grid = rule.apply(working_grid)
+        except Exception:
+            continue
+
+        conflict_map = compute_conflict_map(working_grid, pred_grid)
+
+        if rule.triggers_large_conflict(conflict_map, radius=max_conflict_radius):
+            continue
+
+        noisy = False
+        for r in range(len(conflict_map)):
+            for c in range(len(conflict_map[0])):
+                if conflict_map[r][c]:
+                    propagation[r][c] += 1
+                    if propagation[r][c] > max_conflict_radius:
+                        noisy = True
+        if noisy:
+            continue
+
+        working_grid = pred_grid
+        applied_rules.append(rule)
+
+    return working_grid
+
+
 __all__ = [
     "simulate_rules",
+    "simulate_rules_with_softmask",
     "simulate_symbolic_program",
     "score_prediction",
     "ReflexOverrideException",
