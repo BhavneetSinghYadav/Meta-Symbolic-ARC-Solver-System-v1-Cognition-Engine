@@ -3,58 +3,73 @@
 import argparse
 import json
 from pathlib import Path
-from copy import deepcopy
 
 from arc_solver.src.data.agi_loader import load_agi_tasks, ARCAGITask
 from arc_solver.src.abstractions.abstractor import abstract
 from arc_solver.src.abstractions.rule_generator import generalize_rules
-from arc_solver.src.rank_rule_sets import probabilistic_rank_rule_sets
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.executor.fallback_predictor import predict as fallback_predict
 from arc_solver.src.evaluation.submission_builder import build_submission_json
 
 
-def _derive_program(train_pair):
-    """Return ranked rule sets from the first train pair."""
-    inp, out = train_pair
-    rules = abstract([inp, out])
-    if not rules:
-        return [], []
-    rules = generalize_rules(rules)
-    # fallback variant without zone condition
-    no_zone = []
-    for r in rules:
-        if r.condition and "zone" in r.condition:
-            nr = deepcopy(r)
-            nr.condition.pop("zone", None)
-            no_zone.append(nr)
-    rule_sets = [rules]
-    if no_zone:
-        rule_sets.append(no_zone)
-    ranked = probabilistic_rank_rule_sets(rule_sets, [(inp, out)])
-    if not ranked:
-        return [], []
-    best = ranked[0][0]
-    fallback = ranked[1][0] if len(ranked) > 1 else (no_zone or best)
-    return best, fallback
+def _extract_candidate_rule_sets(train_pairs):
+    """Return generalized rule sets extracted from each training pair."""
+    rule_sets = []
+    for inp, out in train_pairs:
+        extracted = abstract([inp, out])
+        if extracted:
+            generalized = generalize_rules(extracted)
+            rule_sets.append(generalized)
+    return rule_sets
+
+
+def _validate_program_on_all_pairs(rule_program, train_pairs, threshold=1.0):
+    """Return True if program predicts each pair with score >= ``threshold``."""
+    for inp, out in train_pairs:
+        try:
+            pred = simulate_rules(inp, rule_program)
+            if pred.compare_to(out) < threshold:
+                return False
+        except Exception:
+            return False
+    return True
+
+
+def _derive_generalized_program(train_pairs):
+    """Return a rule program that works across all training pairs."""
+    candidate_sets = _extract_candidate_rule_sets(train_pairs)
+    valid_sets = []
+
+    for rule_set in candidate_sets:
+        if not rule_set:
+            continue
+        if _validate_program_on_all_pairs(rule_set, train_pairs):
+            valid_sets.append(rule_set)
+
+    if valid_sets:
+        return valid_sets[0], valid_sets[0]
+    return (candidate_sets[-1], candidate_sets[-1]) if candidate_sets else ([], [])
 
 
 def _predict_task(task: ARCAGITask):
     """Return predictions for each test input of ``task``."""
     if task.train:
-        best, fallback_rules = _derive_program(task.train[0])
+        best, fallback_rules = _derive_generalized_program(task.train)
     else:
         best, fallback_rules = [], []
+
     outputs = []
-    for g in task.test:
+    for test_input in task.test[:2]:
         try:
-            p1 = simulate_rules(g, best) if best else fallback_predict(g)
+            p1 = simulate_rules(test_input, best) if best else fallback_predict(test_input)
         except Exception:
-            p1 = fallback_predict(g)
+            p1 = fallback_predict(test_input)
+
         try:
-            p2 = simulate_rules(g, fallback_rules) if fallback_rules else p1
+            p2 = simulate_rules(test_input, fallback_rules) if fallback_rules else p1
         except Exception:
             p2 = p1
+
         outputs.append([p1.to_list(), p2.to_list()])
     return outputs
 
