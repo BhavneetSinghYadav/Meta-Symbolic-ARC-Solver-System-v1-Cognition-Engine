@@ -26,6 +26,8 @@ from arc_solver.src.symbolic.vocabulary import (
 )
 
 
+
+
 def _heuristic_fallback_rules(inp: Grid, out: Grid) -> List[SymbolicRule]:
     """Return a simple color replacement rule as fallback."""
     src_counts = inp.count_colors()
@@ -207,6 +209,46 @@ def fuse_low_entropy_zones(
                             overlay[r][c] = Symbol(SymbolType.ZONE, z1)
                 entropies.pop(z2, None)
     return overlay
+
+
+# ---------------------------------------------------------------------------
+# Layout detection helpers
+# ---------------------------------------------------------------------------
+
+def extract_layout_rules(input_grid: Grid, target_grid: Grid) -> List[SymbolicRule]:
+    """Return simple layout level rules between input and target."""
+    from arc_solver.src.utils.patterns import (
+        detect_mirrored_regions,
+        detect_repeating_blocks,
+    )
+
+    layout_rules: List[SymbolicRule] = []
+
+    mirror_zones = detect_mirrored_regions(input_grid, target_grid)
+    repeat_zones = detect_repeating_blocks(input_grid, target_grid)
+
+    for axis in mirror_zones:
+        rule = SymbolicRule(
+            transformation=Transformation(
+                TransformationType.FUNCTIONAL, params={"op": f"mirror_{axis}"}
+            ),
+            source=[Symbol(SymbolType.REGION, "All")],
+            target=[Symbol(SymbolType.REGION, "All")],
+            nature=TransformationNature.SPATIAL,
+        )
+        layout_rules.append(rule)
+    for rep in repeat_zones:
+        rule = SymbolicRule(
+            transformation=Transformation(
+                TransformationType.FUNCTIONAL, params={"op": f"repeat_{rep}"}
+            ),
+            source=[Symbol(SymbolType.REGION, "All")],
+            target=[Symbol(SymbolType.REGION, "All")],
+            nature=TransformationNature.SPATIAL,
+        )
+        layout_rules.append(rule)
+
+    return layout_rules
 
 
 # ---------------------------------------------------------------------------
@@ -491,6 +533,7 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
         return []
 
     input_grid, output_grid = objects[0], objects[1]
+    layout = extract_layout_rules(input_grid, output_grid)
     overlay, zone_info = segment_and_overlay(input_grid, output_grid)
     if overlay is not None:
         coverage_map = zone_change_coverage_map(input_grid, output_grid, overlay)
@@ -537,10 +580,11 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
         filtered.append(rule)
     if other_pairs:
         retest_rules_on_pairs(filtered, other_pairs)
-    return filtered
+    return layout + filtered
 
 
 __all__ = [
+    "extract_layout_rules",
     "extract_color_change_rules",
     "extract_shape_based_rules",
     "extract_zonewise_rules",
