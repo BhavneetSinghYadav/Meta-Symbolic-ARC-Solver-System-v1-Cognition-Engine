@@ -26,6 +26,7 @@ from arc_solver.src.core.grid import Grid
 from arc_solver.src.abstractions.abstractor import abstract
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.symbolic.rule_language import rule_to_dsl
+from arc_solver.src.evaluation.perceptual_score import perceptual_similarity_score
 
 
 def load_single_task(task_id: str, data_dir: Path) -> tuple[Grid, Grid]:
@@ -145,6 +146,11 @@ def main() -> None:
         help="Apply rules one by one with intermediate grids",
     )
     parser.add_argument("--trace", action="store_true", help="Print introspection trace summary")
+    parser.add_argument(
+        "--perceptual",
+        action="store_true",
+        help="Use visual perceptual scoring instead of raw .compare_to()",
+    )
     args = parser.parse_args()
 
     # manual matrix injection overrides task loading
@@ -217,10 +223,20 @@ def main() -> None:
         try:
             pred_grid = simulate_rules(input_grid, [rule])
             print_grid("Predicted Grid", pred_grid, use_color=args.color)
-            from arc_solver.src.scoring.diff_penalty import SymbolicDiffPenaltyEngine
-            engine = SymbolicDiffPenaltyEngine()
-            score, diff = engine.score(pred_grid, target_grid)
-            print(f"\u2705 Prediction Score: {score:.3f}")
+            score = (
+                perceptual_similarity_score(pred_grid, target_grid)
+                if args.perceptual
+                else pred_grid.compare_to(target_grid)
+            )
+            diff = pred_grid.diff_summary(target_grid)
+            sym_score = pred_grid.compare_to(target_grid)
+            per_score = perceptual_similarity_score(pred_grid, target_grid)
+            print(
+                f"\u2705 Prediction Score: {score:.3f}"
+            )
+            print(
+                f"\U0001F9E0 Symbolic Score: {sym_score:.3f} | Visual Perceptual Score: {per_score:.3f}"
+            )
             print_grid_diff(pred_grid, target_grid, use_color=args.color)
             metrics = {}
             if args.trace:

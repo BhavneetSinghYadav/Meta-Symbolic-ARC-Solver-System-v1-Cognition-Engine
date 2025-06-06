@@ -8,7 +8,7 @@ from arc_solver.src.abstractions.abstractor import abstract
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.symbolic.rule_language import rule_to_dsl
 from arc_solver.src.core.grid import Grid
-from arc_solver.src.scoring.diff_penalty import SymbolicDiffPenaltyEngine
+from arc_solver.src.evaluation.perceptual_score import perceptual_similarity_score
 
 
 def load_first_pair(task_path: Path) -> tuple[str, Grid, Grid]:
@@ -29,11 +29,10 @@ def diff_grid(pred: Grid, target: Grid) -> List[List[str]]:
     ]
 
 
-def process_task(task_path: Path, trace: bool = False) -> Dict[str, Any]:
+def process_task(task_path: Path, trace: bool = False, perceptual: bool = False) -> Dict[str, Any]:
     """Run MGEL on ``task_path`` and return the best rule result."""
     task_id, inp, tgt = load_first_pair(task_path)
     programs = abstract([inp, tgt])
-    engine = SymbolicDiffPenaltyEngine()
     best: Dict[str, Any] | None = None
     best_score = -1.0
 
@@ -42,7 +41,12 @@ def process_task(task_path: Path, trace: bool = False) -> Dict[str, Any]:
             pred = simulate_rules(inp, [rule])
         except Exception:
             continue
-        score, diff = engine.score(pred, tgt)
+        score = (
+            perceptual_similarity_score(pred, tgt)
+            if perceptual
+            else pred.compare_to(tgt)
+        )
+        diff = pred.diff_summary(tgt)
         trace_details: Dict[str, Any] = {}
         fix_suggestion = ""
         if trace:
@@ -119,6 +123,11 @@ def main() -> None:
     )
     parser.add_argument("--dump_to", type=Path, default=Path("results.json"))
     parser.add_argument("--trace", action="store_true", help="Enable trace introspection")
+    parser.add_argument(
+        "--perceptual",
+        action="store_true",
+        help="Use visual perceptual scoring instead of raw .compare_to()",
+    )
     parser.add_argument("--limit", type=int, help="Max number of tasks to process")
     args = parser.parse_args()
 
@@ -129,7 +138,7 @@ def main() -> None:
     results: List[Dict[str, Any]] = []
     for path in task_files:
         try:
-            res = process_task(path, trace=args.trace)
+            res = process_task(path, trace=args.trace, perceptual=args.perceptual)
             results.append(res)
         except Exception as e:
             results.append({"task_id": path.stem, "error": str(e)})
