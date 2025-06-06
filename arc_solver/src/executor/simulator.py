@@ -475,26 +475,34 @@ def simulate_rules(
             if logger and 0 < coverage < 1.0:
                 logger.info(f"Rule partially applied: coverage={coverage:.2f}")
             if coverage < config_loader.ZONE_COVERAGE_THRESHOLD:
-                alt = SymbolicRule(
-                    transformation=rule.transformation,
-                    source=rule.source,
-                    target=rule.target,
-                    nature=rule.nature,
-                    condition={k: v for k, v in rule.condition.items() if k != "zone"},
-                    meta=rule.meta,
-                )
-                tentative_alt = check_symmetry_break(alt, grid, attention_mask)
-                changed_alt: list[tuple[int, int, int, int]] = []
-                for r in range(h):
-                    for c in range(w):
-                        b = grid.get(r, c)
-                        a = tentative_alt.get(r, c)
-                        if b != a:
-                            changed_alt.append((r, c, b, a))
-                if len(changed_alt) > len(changed):
-                    tentative = tentative_alt
-                    changed = changed_alt
-                    rule = alt
+                zone_policy = config_loader.ZONE_PERSISTENCE_POLICY
+                if zone_policy == "strict":
+                    continue
+                elif zone_policy == "sensitive":
+                    in_zone_change = any((r, c) in zone_cells for r, c, _, _ in changed)
+                    if not in_zone_change:
+                        continue
+                if zone_policy == "relaxed":
+                    alt = SymbolicRule(
+                        transformation=rule.transformation,
+                        source=rule.source,
+                        target=rule.target,
+                        nature=rule.nature,
+                        condition={k: v for k, v in rule.condition.items() if k != "zone"},
+                        meta=rule.meta,
+                    )
+                    tentative_alt = check_symmetry_break(alt, grid, attention_mask)
+                    changed_alt: list[tuple[int, int, int, int]] = []
+                    for r in range(h):
+                        for c in range(w):
+                            b = grid.get(r, c)
+                            a = tentative_alt.get(r, c)
+                            if b != a:
+                                changed_alt.append((r, c, b, a))
+                    if len(changed_alt) > len(changed):
+                        tentative = tentative_alt
+                        changed = changed_alt
+                        rule = alt
         if trace_log is not None:
             trace_log.append({"rule_id": idx, "zone": rule.condition.get("zone"), "effect": changed})
         if logger and zone:
