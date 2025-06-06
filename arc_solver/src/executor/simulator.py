@@ -10,6 +10,7 @@ from collections import Counter, defaultdict
 from arc_solver.src.utils.logger import get_logger
 from arc_solver.src.symbolic.vocabulary import validate_color_range, MAX_COLOR
 from arc_solver.src.utils import config_loader
+from arc_solver.src.utils.coverage import rule_coverage
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import (
@@ -401,14 +402,31 @@ def simulate_rules(
         rules = sort_rules_by_topology(rules)
     except Exception:
         rules = sort_rules_by_dependency(rules)
+
     grid = Grid([row[:] for row in input_grid.data])
+    # Pre-compute rule coverage and sort rules by descending impact
+    coverage_pairs: list[tuple[SymbolicRule, int]] = []
+    for r in rules:
+        try:
+            cov = rule_coverage(r, grid)
+        except Exception:
+            cov = 0
+        coverage_pairs.append((r, cov))
+    coverage_pairs.sort(key=lambda x: x[1], reverse=True)
+    if logger:
+        order = [cov for _, cov in coverage_pairs]
+        logger.debug(f"Rule coverage order: {order}")
     h, w = grid.shape()
     if uncertainty_grid is None:
         uncertainty_grid = [[0 for _ in range(w)] for _ in range(h)]
     write_log: dict[tuple[int, int], list[int]] = defaultdict(list)
     write_vals: dict[tuple[int, int], list[int]] = defaultdict(list)
 
-    for idx, rule in enumerate(rules):
+    for idx, (rule, pre_cov) in enumerate(coverage_pairs):
+        if pre_cov == 0:
+            if logger:
+                logger.warning(f"Skipping rule due to invalid context: {rule}")
+            continue
         if logger:
             colors = sorted({v for row in grid.data for v in row})
             logger.info(f"Applying rule {idx}: {rule}")
