@@ -363,3 +363,35 @@ def preload_memory_from_kaggle_input() -> None:
 
 __all__.append("preload_memory_from_kaggle_input")
 
+
+def validate_memory_program(memory_rule: SymbolicRule, current_input_grid: Any) -> bool:
+    """Return ``True`` if ``memory_rule`` aligns with high-entropy zones."""
+    from arc_solver.src.utils.entropy import compute_zone_entropy_map
+    from arc_solver.src.symbolic.overlay import zone_overlap_score
+
+    entropy_map = compute_zone_entropy_map(current_input_grid)
+    memory_zone = memory_rule.condition.get("zone")
+
+    if memory_zone:
+        score = zone_overlap_score(memory_zone, entropy_map)
+        if score < 0.4:
+            return False
+    return True
+
+
+def inject_reliable_memory_rules(memory_candidates: List[SymbolicRule], current_input_grid: Any) -> List[SymbolicRule]:
+    """Return rules passing reliability and zone validation checks."""
+    valid_rules: List[SymbolicRule] = []
+    for rule in memory_candidates:
+        reliability = rule.meta.get("rule_reliability", 1.0)
+        if reliability < 0.6:
+            continue
+        if not validate_memory_program(rule, current_input_grid):
+            continue
+        valid_rules.append(rule)
+    return valid_rules
+
+
+__all__.append("validate_memory_program")
+__all__.append("inject_reliable_memory_rules")
+
