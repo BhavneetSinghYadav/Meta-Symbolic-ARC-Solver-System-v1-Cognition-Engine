@@ -8,7 +8,8 @@ program parsing.
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Dict, Any
+from dataclasses import dataclass, field
 import logging
 
 from .vocabulary import (
@@ -129,10 +130,42 @@ def rule_to_dsl(rule: SymbolicRule) -> str:
     return str(rule)
 
 
+@dataclass
+class CompositeRule:
+    """A rule composed of multiple symbolic transformations."""
+
+    steps: List[SymbolicRule]
+    nature: TransformationNature | None = None
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+    transformation: Transformation = field(
+        default_factory=lambda: Transformation(TransformationType.COMPOSITE)
+    )
+
+    def simulate(self, grid: "Grid") -> "Grid":
+        """Return grid after sequentially applying steps."""
+        from arc_solver.src.executor.simulator import safe_apply_rule
+
+        out = grid
+        for step in self.steps:
+            out = safe_apply_rule(step, out, perform_checks=False)
+        return out
+
+    def is_well_formed(self) -> bool:
+        return all(step.is_well_formed() for step in self.steps)
+
+    def to_string(self) -> str:
+        return " -> ".join(str(s) for s in self.steps)
+
+    def __str__(self) -> str:  # pragma: no cover - simple
+        return self.to_string()
+
+
 __all__ = [
     "parse_rule",
     "rule_to_dsl",
     "validate_dsl_program",
     "validate_color_range",
     "clean_dsl_string",
+    "CompositeRule",
 ]

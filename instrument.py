@@ -7,7 +7,8 @@ from arc_solver.src.abstractions.abstractor import (
 )
 from arc_solver.src.abstractions.rule_generator import remove_duplicate_rules
 from arc_solver.src.symbolic.repeat_rule import generate_repeat_rules
-from arc_solver.src.executor.simulator import simulate_rules
+from arc_solver.src.symbolic.rule_language import CompositeRule
+from arc_solver.src.executor.simulator import simulate_rules, simulate_composite_rule
 
 
 def log_calls(label):
@@ -57,12 +58,25 @@ def run(bundle: str, task_id: str) -> None:
     shape_rules = extract_shape_based_rules(mid, out)
     print(f"shape {len(shape_rules)}")
 
-    repeat_rules = generate_repeat_rules(mid, out)
+    repeat_rules = generate_repeat_rules(mid, out, post_process=True)
     print(f"repeat {len(repeat_rules)}")
-    for r in repeat_rules:
-        if r.meta.get("replace_map"):
-            print(f"composite mapping: {r.meta['replace_map']}")
-
+    composite_rules = [r for r in repeat_rules if isinstance(r, CompositeRule)]
+    print(f"composite {len(composite_rules)}")
+    best_score = -1.0
+    best_rule = None
+    for comp in composite_rules:
+        pred = simulate_composite_rule(mid, comp)
+        score = pred.compare_to(out)
+        if score > best_score:
+            best_score = score
+            best_rule = comp
+    if best_rule is not None:
+        diff_before = mid.compare_to(out)
+        diff_after = simulate_composite_rule(mid, best_rule).compare_to(out)
+        print(
+            f"best composite {best_rule.to_string()} diff_before={diff_before:.2f} diff_after={diff_after:.2f}"
+        )
+    
     rules = cc_rules + shape_rules + repeat_rules
     wf_rules = [r for r in rules if r.is_well_formed()]
     print(f"is_well_formed {len(wf_rules)}")
