@@ -59,7 +59,7 @@ def _predict_task(task: ARCAGITask):
         best, fallback_rules = [], []
 
     outputs = []
-    for test_input in task.test[:2]:
+    for test_input in task.test:
         try:
             p1 = simulate_rules(test_input, best) if best else fallback_predict(test_input)
         except Exception:
