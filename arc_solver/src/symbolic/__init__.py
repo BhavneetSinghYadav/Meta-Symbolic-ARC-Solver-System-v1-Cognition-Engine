@@ -10,6 +10,7 @@ from .vocabulary import (
 )
 from .rule_language import parse_rule, rule_to_dsl
 from .repeat_rule import repeat_tile, generate_repeat_rules
+from .composite_rules import generate_repeat_composite_rules
 from .abstraction_dsl import rules_to_program, program_to_rules
 from .program_dsl import parse_program_expression
 
@@ -27,4 +28,5 @@ __all__ = [
     "parse_program_expression",
     "repeat_tile",
     "generate_repeat_rules",
+    "generate_repeat_composite_rules",
 ]

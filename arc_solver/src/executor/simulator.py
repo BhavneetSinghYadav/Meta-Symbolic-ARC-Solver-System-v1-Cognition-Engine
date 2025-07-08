@@ -380,6 +380,9 @@ def _safe_apply_rule(
         after = _apply_translate(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.REPEAT:
         after = _apply_repeat(grid, rule, attention_mask)
+    elif rule.transformation.ttype is TransformationType.COMPOSITE:
+        after = _apply_repeat(grid, rule, attention_mask)
+        after = _apply_replace(after, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.CONDITIONAL:
         after = _apply_conditional(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.REGION:
