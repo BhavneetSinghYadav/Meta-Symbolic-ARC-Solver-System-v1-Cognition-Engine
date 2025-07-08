@@ -612,10 +612,12 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
             logger.warning("abstraction failure, falling back")
         rules = []
 
-    if not rules or any(not isinstance(r, SymbolicRule) for r in rules):
+    if not rules or any(not getattr(r, "is_well_formed", lambda: False)() for r in rules):
         if logger:
             logger.warning("No rules extracted. Triggering fallback generator.")
-        rules = generate_fallback_rules((input_grid, output_grid))
+        rules = _heuristic_fallback_rules(input_grid, output_grid)
+        if not rules:
+            rules = generate_fallback_rules((input_grid, output_grid))
     filtered: List[SymbolicRule] = []
     for rule in rules:
         if hasattr(rule, "is_well_formed") and not rule.is_well_formed():
