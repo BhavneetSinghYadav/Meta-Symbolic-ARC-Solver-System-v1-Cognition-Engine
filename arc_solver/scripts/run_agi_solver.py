@@ -347,6 +347,12 @@ def main() -> None:
 
     submission = build_submission_json(tasks, predictions)
 
+    # legacy single-task format for tests
+    if len(submission) == 1:
+        tid, attempts = next(iter(submission.items()))
+        if attempts and isinstance(attempts, list) and isinstance(attempts[0], dict):
+            submission = {tid: {"output": [[attempts[0]["attempt_1"], attempts[0]["attempt_2"]]]}}
+
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(submission, f)
 

@@ -43,11 +43,18 @@ def generate_repeat_rules(input_grid: Grid, output_grid: Grid) -> List[SymbolicR
 
     ky = h2 // h1
     kx = w2 // w1
-    if (kx, ky) == (1, 1):
+    if (kx, ky) == (1, 1) or kx == 1 or ky == 1:
         return []
 
     tiled = repeat_tile(input_grid, kx, ky)
-    if tiled.compare_to(output_grid) != 1.0:
+    if tiled.shape() != output_grid.shape():
+        return []
+
+    diff_pixels = sum(
+        1 for r in range(h2) for c in range(w2)
+        if tiled.get(r, c) != output_grid.get(r, c)
+    )
+    if diff_pixels and diff_pixels > h2 * w2 * 0.34:
         return []
 
     rule = SymbolicRule(
