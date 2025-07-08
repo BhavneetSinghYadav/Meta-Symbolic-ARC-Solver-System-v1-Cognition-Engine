@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import List
 
+import os
 from arc_solver.src.configs.defaults import MAX_REPEAT_DIFF, ENABLE_COMPOSITE_REPEAT
 
 from arc_solver.src.core.grid import Grid
@@ -64,11 +65,18 @@ def generate_repeat_rules(
         if tiled.get(r, c) != output_grid.get(r, c)
     )
     diff_ratio = diff_pixels / (h2 * w2) if h2 * w2 else 0.0
+    fuzz_thr = float(os.environ.get("ARC_SOLVER_REPEAT_FUZZ", MAX_REPEAT_DIFF))
 
     composite_map = None
-    if diff_pixels and diff_ratio >= MAX_REPEAT_DIFF:
+    if diff_pixels and diff_ratio >= fuzz_thr:
         if ENABLE_COMPOSITE_REPEAT:
             composite_map = detect_replace_map(tiled, output_grid)
+            if composite_map:
+                valid = {}
+                for src, tgt in composite_map.items():
+                    if any(src in row for row in input_grid.data):
+                        valid[src] = tgt
+                composite_map = valid
             if not composite_map:
                 return []
         else:
@@ -87,7 +95,7 @@ def generate_repeat_rules(
     if composite_map:
         rule.meta["replace_map"] = composite_map
         rule.meta["diff_mask"] = tiled.structural_diff(output_grid)
-    elif diff_pixels and diff_ratio >= MAX_REPEAT_DIFF:
+    elif diff_pixels and diff_ratio >= fuzz_thr:
         # composite disabled; drop rule
         return []
 
