@@ -219,6 +219,20 @@ def _apply_translate(
     return Grid(new_data)
 
 
+def _apply_repeat(
+    grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
+) -> Grid:
+    """Tile ``grid`` according to ``rule`` parameters."""
+    try:
+        kx = int(rule.transformation.params.get("kx", "1"))
+        ky = int(rule.transformation.params.get("ky", "1"))
+    except ValueError:
+        return grid
+    from arc_solver.src.symbolic.repeat_rule import repeat_tile
+
+    return repeat_tile(grid, kx, ky)
+
+
 def _apply_conditional(
     grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
 ) -> Grid:
@@ -364,6 +378,8 @@ def _safe_apply_rule(
             return grid
     elif rule.transformation.ttype is TransformationType.TRANSLATE:
         after = _apply_translate(grid, rule, attention_mask)
+    elif rule.transformation.ttype is TransformationType.REPEAT:
+        after = _apply_repeat(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.CONDITIONAL:
         after = _apply_conditional(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.REGION:
@@ -416,9 +432,9 @@ def simulate_rules(
     if logger:
         order = [cov for _, cov in coverage_pairs]
         logger.debug(f"Rule coverage order: {order}")
-    h, w = grid.shape()
+    h0, w0 = grid.shape()
     if uncertainty_grid is None:
-        uncertainty_grid = [[0 for _ in range(w)] for _ in range(h)]
+        uncertainty_grid = [[0 for _ in range(w0)] for _ in range(h0)]
     write_log: dict[tuple[int, int], list[int]] = defaultdict(list)
     write_vals: dict[tuple[int, int], list[int]] = defaultdict(list)
 
@@ -444,9 +460,13 @@ def simulate_rules(
                 logger.warning(f"Reflex override triggered by rule: {rule}")
             continue
 
+        gh, gw = grid.shape()
+        th, tw = tentative.shape()
+        max_h = max(gh, th)
+        max_w = max(gw, tw)
         changed: list[tuple[int, int, int, int]] = []
-        for r in range(h):
-            for c in range(w):
+        for r in range(max_h):
+            for c in range(max_w):
                 before_val = grid.get(r, c)
                 after_val = tentative.get(r, c)
                 if before_val != after_val:
@@ -458,7 +478,7 @@ def simulate_rules(
             if logger:
                 logger.info("Pruning ineffective rule")
             continue
-        coverage_ratio = len(changed) / (h * w)
+        coverage_ratio = len(changed) / (th * tw)
         rule.meta["coverage_ratio"] = coverage_ratio
         if coverage_ratio < 0.01:
             rule.meta["demoted"] = True
@@ -466,8 +486,8 @@ def simulate_rules(
             overlay = zone_overlay(grid)
             zone_cells = [
                 (r, c)
-                for r in range(h)
-                for c in range(w)
+                for r in range(gh)
+                for c in range(gw)
                 if overlay[r][c] is not None and overlay[r][c].value == zone
             ]
             coverage = len(changed) / len(zone_cells) if zone_cells else 0.0
@@ -493,8 +513,8 @@ def simulate_rules(
                     )
                     tentative_alt = check_symmetry_break(alt, grid, attention_mask)
                     changed_alt: list[tuple[int, int, int, int]] = []
-                    for r in range(h):
-                        for c in range(w):
+                    for r in range(gh):
+                        for c in range(gw):
                             b = grid.get(r, c)
                             a = tentative_alt.get(r, c)
                             if b != a:
@@ -528,9 +548,15 @@ def simulate_rules(
     if logger and conflict_count:
         logger.info(f"Conflicting writes: {conflict_count}")
 
+    fh, fw = grid.shape()
+    area_h = max(h0, fh)
+    area_w = max(w0, fw)
     coverage_score = sum(
-        1 for r in range(h) for c in range(w) if input_grid.get(r, c) != grid.get(r, c)
-    ) / (h * w)
+        1
+        for r in range(area_h)
+        for c in range(area_w)
+        if input_grid.get(r, c) != grid.get(r, c)
+    ) / (area_h * area_w)
     entropy_delta = _grid_entropy(grid) - _grid_entropy(input_grid)
     if logger:
         logger.info(
@@ -540,7 +566,8 @@ def simulate_rules(
             conflict_count,
         )
 
-    if not validate_grid(grid, expected_shape=input_grid.shape()):
+    expected = input_grid.shape() if grid.shape() == input_grid.shape() else None
+    if not validate_grid(grid, expected_shape=expected):
         if logger:
             logger.warning("simulation produced invalid grid; returning copy")
         grid = Grid([row[:] for row in input_grid.data])

@@ -9,6 +9,7 @@ from .vocabulary import (
     TransformationType,
 )
 from .rule_language import parse_rule, rule_to_dsl
+from .repeat_rule import repeat_tile, generate_repeat_rules
 from .abstraction_dsl import rules_to_program, program_to_rules
 from .program_dsl import parse_program_expression
 
@@ -24,4 +25,6 @@ __all__ = [
     "rules_to_program",
     "program_to_rules",
     "parse_program_expression",
+    "repeat_tile",
+    "generate_repeat_rules",
 ]

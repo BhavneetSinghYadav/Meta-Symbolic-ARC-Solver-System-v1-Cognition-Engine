@@ -44,6 +44,7 @@ class TransformationType(Enum):
     FILTER = "FILTER"
     ROTATE = "ROTATE"
     REFLECT = "REFLECT"
+    REPEAT = "REPEAT"
     CONDITIONAL = "CONDITIONAL"
     REGION = "REGION"
     FUNCTIONAL = "FUNCTIONAL"

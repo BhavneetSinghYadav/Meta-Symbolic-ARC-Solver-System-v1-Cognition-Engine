@@ -24,6 +24,7 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationNature,
     TransformationType,
 )
+from arc_solver.src.symbolic.repeat_rule import generate_repeat_rules
 
 
 
@@ -554,6 +555,10 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
         if logger:
             logger.info(f"shape_based_rules: {len(shape_rules)}")
         rules.extend(shape_rules)
+        repeat_rules = generate_repeat_rules(mid_grid, output_grid)
+        if logger:
+            logger.info(f"repeat_rules: {len(repeat_rules)}")
+        rules.extend(repeat_rules)
         split: List[SymbolicRule] = []
         for r in rules:
             if (
