@@ -9,6 +9,7 @@ import math
 from collections import Counter, defaultdict
 from arc_solver.src.utils.logger import get_logger
 from arc_solver.src.symbolic.vocabulary import validate_color_range, MAX_COLOR
+from arc_solver.src.symbolic.rule_language import CompositeRule
 from arc_solver.src.utils import config_loader
 from arc_solver.src.utils.coverage import rule_coverage
 
@@ -29,6 +30,14 @@ from arc_solver.src.utils.grid_utils import validate_grid
 
 logger = get_logger(__name__)
 CONFLICT_POLICY = config_loader.META_CONFIG.get("conflict_resolution", "most_frequent")
+
+
+def simulate_composite_rule(grid: Grid, rule: CompositeRule) -> Grid:
+    """Apply a :class:`CompositeRule` to ``grid`` sequentially."""
+    out = Grid([row[:] for row in grid.data])
+    for step in rule.steps:
+        out = safe_apply_rule(step, out, perform_checks=False)
+    return out
 
 
 def _grid_entropy(grid: Grid) -> float:
@@ -383,7 +392,9 @@ def _safe_apply_rule(
 ) -> Grid:
     before = Grid([row[:] for row in grid.data])
 
-    if rule.transformation.ttype is TransformationType.REPLACE:
+    if isinstance(rule, CompositeRule):
+        after = simulate_composite_rule(grid, rule)
+    elif rule.transformation.ttype is TransformationType.REPLACE:
         try:
             after = _apply_replace(grid, rule, attention_mask)
         except Exception as e:
@@ -647,4 +658,5 @@ __all__ = [
     "validate_rule_application",
     "check_symmetry_break",
     "visualize_uncertainty",
+    "simulate_composite_rule",
 ]

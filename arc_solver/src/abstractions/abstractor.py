@@ -556,10 +556,18 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
         if logger:
             logger.info(f"shape_based_rules: {len(shape_rules)}")
         rules.extend(shape_rules)
-        repeat_rules = generate_repeat_rules(mid_grid, output_grid)
+        repeat_rules = generate_repeat_rules(mid_grid, output_grid, post_process=True)
         if logger:
             logger.info(f"repeat_rules: {len(repeat_rules)}")
-        rules.extend(repeat_rules)
+        rules.extend([r for r in repeat_rules if not hasattr(r, "steps")])
+
+        composite_candidates = [r for r in repeat_rules if hasattr(r, "steps")]
+        for comp in composite_candidates:
+            if not comp.is_well_formed():
+                continue
+            pred = comp.simulate(mid_grid)
+            if pred.compare_to(output_grid) > mid_grid.compare_to(output_grid):
+                rules.append(comp)
         if ENABLE_COMPOSITE_REPEAT:
             for rr in repeat_rules:
                 rmap = rr.meta.get("replace_map") if hasattr(rr, "meta") else None
