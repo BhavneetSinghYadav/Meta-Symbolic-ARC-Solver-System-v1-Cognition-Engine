@@ -67,7 +67,7 @@ def score_rule(input_grid: Grid, output_grid: Grid, rule: SymbolicRule | Composi
     # Penalize complex rules
     from arc_solver.src.abstractions.rule_generator import rule_cost
     if isinstance(rule, CompositeRule):
-        complexity = sum(rule_cost(step) for step in rule.steps)
+        complexity = len(rule.steps)
     else:
         complexity = rule_cost(rule)
     final = base - 0.05 * complexity

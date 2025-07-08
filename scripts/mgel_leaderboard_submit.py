@@ -88,9 +88,17 @@ def main() -> None:
         default=Path("submission.json"),
         help="Destination submission file",
     )
+    parser.add_argument(
+        "--max_tasks",
+        type=int,
+        default=None,
+        help="Maximum number of tasks to process",
+    )
     args = parser.parse_args()
 
     tasks = load_agi_tasks(args.challenges)
+    if args.max_tasks:
+        tasks = tasks[: args.max_tasks]
     predictions = {}
     for task in tasks:
         try:

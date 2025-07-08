@@ -40,6 +40,16 @@ def simulate_composite_rule(grid: Grid, rule: CompositeRule) -> Grid:
     return out
 
 
+def simulate_composite_safe(grid: Grid, rule: CompositeRule) -> Grid:
+    """Apply composite rule skipping invalid steps."""
+    out = Grid([row[:] for row in grid.data])
+    for step in rule.steps:
+        if not validate_rule_application(step, out):
+            continue
+        out = safe_apply_rule(step, out, perform_checks=False)
+    return out
+
+
 def _grid_entropy(grid: Grid) -> float:
     counts = grid.count_colors()
     total = sum(counts.values())
@@ -393,7 +403,7 @@ def _safe_apply_rule(
     before = Grid([row[:] for row in grid.data])
 
     if isinstance(rule, CompositeRule):
-        after = simulate_composite_rule(grid, rule)
+        after = simulate_composite_safe(grid, rule)
     elif rule.transformation.ttype is TransformationType.REPLACE:
         try:
             after = _apply_replace(grid, rule, attention_mask)
@@ -659,4 +669,5 @@ __all__ = [
     "check_symmetry_break",
     "visualize_uncertainty",
     "simulate_composite_rule",
+    "simulate_composite_safe",
 ]
