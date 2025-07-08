@@ -20,6 +20,20 @@ from . import llm_engine
 
 logger = logging.getLogger(__name__)
 
+# Simple memory of rules that frequently misfire
+FAILED_RULE_MEMORY: Dict[str, int] = {}
+
+
+def record_rule_failure(rule: SymbolicRule) -> None:
+    """Increment failure count for ``rule``."""
+    rid = str(rule)
+    FAILED_RULE_MEMORY[rid] = FAILED_RULE_MEMORY.get(rid, 0) + 1
+
+
+def failed_rule_penalty(rule: SymbolicRule, threshold: int = 3) -> bool:
+    """Return True if ``rule`` has repeatedly failed."""
+    return FAILED_RULE_MEMORY.get(str(rule), 0) >= threshold
+
 try:
     from arc_solver.src.introspection.llm_engine import repair_symbolic_rule
 except Exception:
@@ -256,6 +270,8 @@ def run_meta_repair(
         if new_score > original_score:
             return new_pred, new_rules
 
+        record_rule_failure(hyp.rule)
+
     return predicted, rules
 
 
@@ -269,4 +285,6 @@ __all__ = [
     "llm_suggest_rule_fix",
     "evaluate_repair_candidates",
     "run_meta_repair",
+    "record_rule_failure",
+    "failed_rule_penalty",
 ]
