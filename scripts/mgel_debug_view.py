@@ -89,10 +89,12 @@ def _maybe_show_solutions(task_id: str, solutions_file: Optional[Path]) -> None:
 # ────────────────────────────────────────────────────────────
 def main() -> None:
     p = argparse.ArgumentParser("MGEL symbolic debug viewer")
-    p.add_argument("--task_id", required=True)
+    p.add_argument("--task_id")
     p.add_argument("--data_dir", type=Path)
     p.add_argument("--data_file", type=Path)
     p.add_argument("--solutions_file", type=Path)
+    p.add_argument("--manual_input", type=Path)
+    p.add_argument("--manual_target", type=Path)
     p.add_argument("--color", action="store_true")
     p.add_argument("--step_by_step", action="store_true")
     p.add_argument("--trace", action="store_true")
@@ -101,12 +103,22 @@ def main() -> None:
     if args.trace:
         logging.basicConfig(level=logging.DEBUG)
 
-    inp_grid, tgt_grid = _load_single_task(
-        args.task_id, args.data_dir, args.data_file
-    )
+    if args.manual_input and args.manual_target:
+        with open(args.manual_input, "r", encoding="utf-8") as f:
+            inp_grid = Grid(json.load(f))
+        with open(args.manual_target, "r", encoding="utf-8") as f:
+            tgt_grid = Grid(json.load(f))
+        task_label = "manual"
+    else:
+        if not args.task_id:
+            raise ValueError("--task_id required unless using --manual_input and --manual_target")
+        inp_grid, tgt_grid = _load_single_task(
+            args.task_id, args.data_dir, args.data_file
+        )
+        task_label = args.task_id
 
     print("=" * 40)
-    print(f"TASK {args.task_id}  —  MGEL Debug Trace")
+    print(f"TASK {task_label}  —  MGEL Debug Trace")
     print("=" * 40)
     _print_grid("Input", inp_grid, args.color)
     _print_grid("Target", tgt_grid, args.color)
@@ -143,10 +155,12 @@ def main() -> None:
     if best_pred is not None:
         print("\n✅  Best prediction diff:")
         _print_diff(best_pred, tgt_grid)
+        print(f"Prediction Score: {best_score:.3f}")
     else:
-        print("❌  No successful simulation.")
+        print("No symbolic rules")
 
-    _maybe_show_solutions(args.task_id, args.solutions_file)
+    if args.solutions_file is not None and args.task_id:
+        _maybe_show_solutions(args.task_id, args.solutions_file)
 
 
 if __name__ == "__main__":
