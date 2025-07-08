@@ -17,9 +17,12 @@ def rule_coverage(rule: SymbolicRule, grid: Grid) -> int:
     except _sim.ReflexOverrideException:
         return 0
     h, w = grid.shape()
+    th, tw = tentative.shape()
+    max_h = max(h, th)
+    max_w = max(w, tw)
     count = 0
-    for r in range(h):
-        for c in range(w):
+    for r in range(max_h):
+        for c in range(max_w):
             if grid.get(r, c) != tentative.get(r, c):
                 count += 1
     return count
