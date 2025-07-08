@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
+import logging
 
 from arc_solver.src.core.grid import Grid
 
@@ -33,4 +34,31 @@ def detect_repeating_blocks(inp: Grid, out: Grid) -> List[str]:
     return zones
 
 
-__all__ = ["detect_mirrored_regions", "detect_repeating_blocks"]
+def detect_replace_map(
+    grid1: Grid, grid2: Grid, *, max_substitutions: int = 3
+) -> Dict[int, int]:
+    """Return color mapping from ``grid1`` to ``grid2`` if consistent."""
+    logger = logging.getLogger(__name__)
+    if grid1.shape() != grid2.shape():
+        return {}
+    h, w = grid1.shape()
+    mapping: Dict[int, int] = {}
+    for r in range(h):
+        for c in range(w):
+            a = grid1.get(r, c)
+            b = grid2.get(r, c)
+            if a == b:
+                continue
+            if a in mapping and mapping[a] != b:
+                return {}
+            mapping[a] = b
+    if len(mapping) > max_substitutions:
+        logger.warning("replace_map exceeds max_substitutions")
+    return mapping
+
+
+__all__ = [
+    "detect_mirrored_regions",
+    "detect_repeating_blocks",
+    "detect_replace_map",
+]

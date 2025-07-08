@@ -25,7 +25,7 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationType,
 )
 from arc_solver.src.symbolic.repeat_rule import generate_repeat_rules
-from arc_solver.src.symbolic.composite_rules import generate_repeat_composite_rules
+from arc_solver.src.configs.defaults import ENABLE_COMPOSITE_REPEAT
 
 
 
@@ -560,10 +560,20 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
         if logger:
             logger.info(f"repeat_rules: {len(repeat_rules)}")
         rules.extend(repeat_rules)
-        composite = generate_repeat_composite_rules(mid_grid, output_grid)
-        if logger:
-            logger.info(f"composite_rules: {len(composite)}")
-        rules.extend(composite)
+        if ENABLE_COMPOSITE_REPEAT:
+            for rr in repeat_rules:
+                rmap = rr.meta.get("replace_map") if hasattr(rr, "meta") else None
+                if not rmap:
+                    continue
+                for src, tgt in rmap.items():
+                    repl = SymbolicRule(
+                        transformation=Transformation(TransformationType.REPLACE),
+                        source=[Symbol(SymbolType.COLOR, str(src))],
+                        target=[Symbol(SymbolType.COLOR, str(tgt))],
+                        nature=TransformationNature.LOGICAL,
+                    )
+                    rr.meta.setdefault("secondary_rules", []).append(repl)
+                    rules.append(repl)
         split: List[SymbolicRule] = []
         for r in rules:
             if (

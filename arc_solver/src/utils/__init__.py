@@ -1,7 +1,11 @@
 from .signature_extractor import extract_task_signature, similarity_score
 from .grid_utils import validate_grid
 from .coverage import rule_coverage
-from .patterns import detect_mirrored_regions, detect_repeating_blocks
+from .patterns import (
+    detect_mirrored_regions,
+    detect_repeating_blocks,
+    detect_replace_map,
+)
 
 __all__ = [
     "extract_task_signature",
@@ -10,4 +14,5 @@ __all__ = [
     "rule_coverage",
     "detect_mirrored_regions",
     "detect_repeating_blocks",
+    "detect_replace_map",
 ]

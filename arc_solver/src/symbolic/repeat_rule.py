@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import List
 
-from arc_solver.src.configs.defaults import MAX_REPEAT_DIFF
+from arc_solver.src.configs.defaults import MAX_REPEAT_DIFF, ENABLE_COMPOSITE_REPEAT
 
 from arc_solver.src.core.grid import Grid
+from arc_solver.src.utils.patterns import detect_replace_map
 from arc_solver.src.symbolic.vocabulary import (
     Symbol,
     SymbolType,
@@ -54,8 +55,16 @@ def generate_repeat_rules(input_grid: Grid, output_grid: Grid) -> List[SymbolicR
         1 for r in range(h2) for c in range(w2)
         if tiled.get(r, c) != output_grid.get(r, c)
     )
-    if diff_pixels and diff_pixels > h2 * w2 * MAX_REPEAT_DIFF:
-        return []
+    diff_ratio = diff_pixels / (h2 * w2) if h2 * w2 else 0.0
+
+    composite_map = None
+    if diff_pixels and diff_ratio >= MAX_REPEAT_DIFF:
+        if ENABLE_COMPOSITE_REPEAT:
+            composite_map = detect_replace_map(tiled, output_grid)
+            if not composite_map:
+                return []
+        else:
+            return []
 
     rule = SymbolicRule(
         transformation=Transformation(
@@ -66,6 +75,14 @@ def generate_repeat_rules(input_grid: Grid, output_grid: Grid) -> List[SymbolicR
         target=[Symbol(SymbolType.REGION, "All")],
         nature=TransformationNature.SPATIAL,
     )
+
+    if composite_map:
+        rule.meta["replace_map"] = composite_map
+        rule.meta["diff_mask"] = tiled.structural_diff(output_grid)
+    elif diff_pixels and diff_ratio >= MAX_REPEAT_DIFF:
+        # composite disabled; drop rule
+        return []
+
     return [rule]
 
 

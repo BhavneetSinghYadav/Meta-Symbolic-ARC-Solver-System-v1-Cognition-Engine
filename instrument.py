@@ -59,6 +59,9 @@ def run(bundle: str, task_id: str) -> None:
 
     repeat_rules = generate_repeat_rules(mid, out)
     print(f"repeat {len(repeat_rules)}")
+    for r in repeat_rules:
+        if r.meta.get("replace_map"):
+            print(f"composite mapping: {r.meta['replace_map']}")
 
     rules = cc_rules + shape_rules + repeat_rules
     wf_rules = [r for r in rules if r.is_well_formed()]

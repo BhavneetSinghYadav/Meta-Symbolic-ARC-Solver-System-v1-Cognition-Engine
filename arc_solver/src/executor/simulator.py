@@ -230,7 +230,20 @@ def _apply_repeat(
         return grid
     from arc_solver.src.symbolic.repeat_rule import repeat_tile
 
-    return repeat_tile(grid, kx, ky)
+    tiled = repeat_tile(grid, kx, ky)
+
+    replace_map = rule.meta.get("replace_map") if hasattr(rule, "meta") else None
+    if replace_map:
+        h, w = tiled.shape()
+        new_data = [row[:] for row in tiled.data]
+        for r in range(h):
+            for c in range(w):
+                val = new_data[r][c]
+                if val in replace_map:
+                    new_data[r][c] = replace_map[val]
+        tiled = Grid(new_data)
+
+    return tiled
 
 
 def _apply_conditional(
