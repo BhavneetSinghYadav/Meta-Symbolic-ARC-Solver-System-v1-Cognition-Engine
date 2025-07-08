@@ -9,6 +9,7 @@ from arc_solver.src.abstractions.rule_generator import remove_duplicate_rules
 from arc_solver.src.symbolic.repeat_rule import generate_repeat_rules
 from arc_solver.src.symbolic.rule_language import CompositeRule
 from arc_solver.src.executor.simulator import simulate_rules, simulate_composite_rule
+from arc_solver.src.executor.scoring import score_rule, preferred_rule_types
 
 
 def log_calls(label):
@@ -86,6 +87,24 @@ def run(bundle: str, task_id: str) -> None:
 
     final_rules = abstract([inp, out])
     print(f"abstract total {len(final_rules)}")
+
+    if final_rules:
+        scores = [score_rule(inp, out, r) for r in final_rules]
+        print(f"top_score {max(scores):.3f}")
+        hist = {}
+        for r in final_rules:
+            t = r.transformation.ttype.value
+            hist[t] = hist.get(t, 0) + 1
+        print(f"type_hist {hist}")
+        delta = preferred_rule_types(inp, out)
+        perf = {}
+        for t in hist:
+            best = max(
+                (score_rule(inp, out, r) for r in final_rules if r.transformation.ttype.value == t),
+                default=0.0,
+            )
+            perf[t] = round(best, 3)
+        print(f"perf_{delta} {perf}")
 
 
 def _cli() -> None:

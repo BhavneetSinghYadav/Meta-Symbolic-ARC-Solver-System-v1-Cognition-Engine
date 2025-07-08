@@ -135,6 +135,7 @@ def generate_fallback_rules(pair: Tuple[Grid, Grid]) -> List[SymbolicRule]:
 
 from arc_solver.src.segment.segmenter import zone_overlay, expand_zone_overlay
 from arc_solver.src.executor.simulator import simulate_rules
+from arc_solver.src.executor.scoring import score_rule, preferred_rule_types
 from arc_solver.src.utils import config_loader
 
 
@@ -592,6 +593,20 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
             else:
                 split.append(r)
         rules = split
+
+        # ------------------------------------------------------------------
+        # Prioritize rules using scoring and strategy registry
+        # ------------------------------------------------------------------
+        scored: List[Tuple[SymbolicRule, float]] = []
+        pref = preferred_rule_types(input_grid, output_grid)
+        for r in rules:
+            s = score_rule(input_grid, output_grid, r)
+            bonus = 0.2 if r.transformation.ttype.value in pref else 0.0
+            chain_pen = len(getattr(r, "steps", []))
+            scored.append((r, s + bonus - 0.05 * chain_pen))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        TOP_N = 25
+        rules = [r for r, _ in scored[:TOP_N]]
     except Exception:
         if logger:
             logger.warning("abstraction failure, falling back")

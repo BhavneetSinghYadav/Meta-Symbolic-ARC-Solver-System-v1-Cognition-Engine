@@ -1,6 +1,7 @@
 """Execution utilities for applying symbolic rule programs."""
 
 from .simulator import simulate_rules, score_prediction
+from .scoring import score_rule, preferred_rule_types
 from .conflict_resolver import (
     detect_conflicts,
     resolve_conflicts,
@@ -17,4 +18,6 @@ __all__ = [
     "apply_rules_with_resolution",
     "merge_rule_sets",
     "select_best_program",
+    "score_rule",
+    "preferred_rule_types",
 ]
