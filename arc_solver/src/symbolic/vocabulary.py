@@ -48,6 +48,7 @@ class TransformationType(Enum):
     CONDITIONAL = "CONDITIONAL"
     REGION = "REGION"
     FUNCTIONAL = "FUNCTIONAL"
+    COMPOSITE = "COMPOSITE"
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.value

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import List
 
+from arc_solver.src.configs.defaults import MAX_REPEAT_DIFF
+
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import (
     Symbol,
@@ -43,8 +45,6 @@ def generate_repeat_rules(input_grid: Grid, output_grid: Grid) -> List[SymbolicR
 
     ky = h2 // h1
     kx = w2 // w1
-    if (kx, ky) == (1, 1) or kx == 1 or ky == 1:
-        return []
 
     tiled = repeat_tile(input_grid, kx, ky)
     if tiled.shape() != output_grid.shape():
@@ -54,7 +54,7 @@ def generate_repeat_rules(input_grid: Grid, output_grid: Grid) -> List[SymbolicR
         1 for r in range(h2) for c in range(w2)
         if tiled.get(r, c) != output_grid.get(r, c)
     )
-    if diff_pixels and diff_pixels > h2 * w2 * 0.34:
+    if diff_pixels and diff_pixels > h2 * w2 * MAX_REPEAT_DIFF:
         return []
 
     rule = SymbolicRule(

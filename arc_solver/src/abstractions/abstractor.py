@@ -25,6 +25,7 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationType,
 )
 from arc_solver.src.symbolic.repeat_rule import generate_repeat_rules
+from arc_solver.src.symbolic.composite_rules import generate_repeat_composite_rules
 
 
 
@@ -559,6 +560,10 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
         if logger:
             logger.info(f"repeat_rules: {len(repeat_rules)}")
         rules.extend(repeat_rules)
+        composite = generate_repeat_composite_rules(mid_grid, output_grid)
+        if logger:
+            logger.info(f"composite_rules: {len(composite)}")
+        rules.extend(composite)
         split: List[SymbolicRule] = []
         for r in rules:
             if (
