@@ -130,6 +130,13 @@ def rule_to_dsl(rule: SymbolicRule) -> str:
     return str(rule)
 
 
+def generate_fallback_rules(inp: "Grid", out: "Grid") -> list[SymbolicRule]:
+    """Return heuristic fallback rules for use outside the abstractor."""
+    from arc_solver.src.abstractions.abstractor import _heuristic_fallback_rules
+
+    return _heuristic_fallback_rules(inp, out)
+
+
 @dataclass
 class CompositeRule:
     """A rule composed of multiple symbolic transformations."""
@@ -164,6 +171,7 @@ class CompositeRule:
 __all__ = [
     "parse_rule",
     "rule_to_dsl",
+    "generate_fallback_rules",
     "validate_dsl_program",
     "validate_color_range",
     "clean_dsl_string",

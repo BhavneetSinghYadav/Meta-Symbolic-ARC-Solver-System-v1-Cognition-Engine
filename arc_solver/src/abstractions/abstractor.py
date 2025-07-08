@@ -113,6 +113,13 @@ def segment_and_overlay(
 
 def generate_fallback_rules(pair: Tuple[Grid, Grid]) -> List[SymbolicRule]:
     """Return simple fallback rules when extraction fails."""
+    inp, out = pair
+    heuristics = _heuristic_fallback_rules(inp, out)
+    if heuristics:
+        for r in heuristics:
+            r.meta["fallback_reason"] = "heuristic"
+        return heuristics
+
     fallback_templates = [
         SymbolicRule(
             transformation=Transformation(TransformationType.REPLACE),
