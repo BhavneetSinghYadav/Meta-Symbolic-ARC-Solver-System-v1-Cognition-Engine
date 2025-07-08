@@ -1,282 +1,152 @@
-"""Minimal Grounded Execution Loop (MGEL) debug viewer.
+"""MGEL Debug Viewer — works with both bundled and per-file ARC datasets.
 
-This script loads a single ARC task, extracts symbolic rules using the
-``abstract`` function, and then applies each rule while printing a detailed
-trace.  It can load a task by ``task_id`` from a directory of ARC JSON files
-or use manually injected matrices.  Optional ``--color`` and ``--step_by_step``
-flags enable coloured grid output and step-by-step rule execution. Additional
-flags ``--manual_input`` and ``--manual_target`` allow matrices to be loaded
-from JSON files, while ``--dump_to`` saves an evaluation summary to disk.
-``--trace`` prints introspection summaries.
+Usage
+-----
+Legacy layout:
+    python mgel_debug_view.py --task_id 5bd6f4ac --data_dir arc_data/
 
-Usage::
-
-    python scripts/mgel_debug_view.py --task_id 5bd6f4ac --data_dir <dir>
-
-If ``--task_id`` is omitted the manual matrices defined in the script are
-used instead.
+Bundled JSON:
+    python mgel_debug_view.py --task_id 093a4d8 \
+        --data_file /kaggle/input/arc-prize-2025/arc-agi_evaluation_challenges.json \
+        --solutions_file /kaggle/input/arc-prize-2025/arc-agi_evaluation_solutions.json
 """
 
 import argparse
 import json
+import logging
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 from arc_solver.src.data.arc_dataset import ARCDataset, load_arc_task
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.abstractions.abstractor import abstract
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.symbolic.rule_language import rule_to_dsl
-from arc_solver.src.evaluation.perceptual_score import perceptual_similarity_score
+
+logger = logging.getLogger("mgel_debug_view")
 
 
-def load_single_task(task_id: str, data_dir: Path) -> tuple[Grid, Grid]:
-    """Return the first train pair of ``task_id`` from ``data_dir``."""
-    task_path = data_dir / f"{task_id}.json"
-    task = load_arc_task(task_path)
-    grids = ARCDataset.to_grids(task)
+# ────────────────────────────────────────────────────────────
+def _load_single_task(
+    task_id: str,
+    data_dir: Optional[Path] = None,
+    data_file: Optional[Path] = None,
+) -> Tuple[Grid, Grid]:
+    """Return (input_grid, target_grid) of the first *train* pair."""
+    if data_file is not None:
+        bundle = json.load(open(data_file, "r"))
+        if task_id not in bundle:
+            raise KeyError(f"{task_id} not found in {data_file}")
+        task_dict = bundle[task_id]
+    elif data_dir is not None:
+        task_path = Path(data_dir) / f"{task_id}.json"
+        task_dict = load_arc_task(task_path)
+    else:
+        raise ValueError("Provide --data_dir or --data_file")
+
+    grids = ARCDataset.to_grids(task_dict)
     if not grids["train"]:
         raise ValueError("Task has no training pairs")
     return grids["train"][0]
 
 
-def print_colored_grid(grid: Grid) -> None:
-    for row in grid.data:
-        print(" ", "".join(f"\033[3{val % 8}m{val}\033[0m" for val in row))
+def _ansi(val: int) -> str:
+    return f"\033[3{val % 8}m{val}\033[0m"
 
 
-def print_grid(label: str, grid: Grid, *, use_color: bool = False) -> None:
-    print(f"\n🔹{label}:")
-    if use_color:
-        print_colored_grid(grid)
-    else:
-        for row in grid.data:
+def _print_grid(title: str, g: Grid, color: bool = False) -> None:
+    print(f"\n🔹{title}:")
+    for row in g.data:
+        if color:
+            print(" ", *(_ansi(v) for v in row))
+        else:
             print(" ", row)
 
 
-def print_grid_diff(pred: Grid, target: Grid, *, use_color: bool = False) -> None:
-    """Print row-wise diff between ``pred`` and ``target`` grids."""
-    print("\n🔍 Prediction vs Target Diff:")
-    for pr, tg in zip(pred.data, target.data):
-        diff_row = ["✓" if a == b else "✗" for a, b in zip(pr, tg)]
-        if use_color:
-            diff_col = " ".join(
-                "\033[92m✓\033[0m" if d == "✓" else "\033[91m✗\033[0m" for d in diff_row
-            )
-        else:
-            diff_col = " ".join(diff_row)
-        print(f" P: {pr}\n T: {tg}\n D: {diff_col}\n")
+def _print_diff(pred: Grid, tgt: Grid) -> None:
+    diff = [
+        ["✓" if a == b else "✗" for a, b in zip(rp, rt)]
+        for rp, rt in zip(pred.data, tgt.data)
+    ]
+    for pr, tg, df in zip(pred.data, tgt.data, diff):
+        print(" P:", pr, "\n T:", tg, "\n D:", df, "\n")
 
 
-def dump_output(result: dict, path: Path) -> None:
-    """Write result dictionary to ``path`` as JSON or Markdown."""
-    if path.suffix == ".json":
-        with open(path, "w") as fh:
-            json.dump(result, fh, indent=2)
-    elif path.suffix == ".md":
-        lines = [
-            f"# MGEL Debug Output for {result['task_id']}",
-            "## Rules",
-            *[f"- `{r}`" for r in result["rules"]],
-            f"\n**Prediction Score:** {result['prediction_score']:.3f}\n",
-            "## Trace Summary",
-        ]
-        for k, v in result.get("trace_summary", {}).items():
-            lines.append(f"- **{k}**: {v}")
-        lines.extend([
-            "\n## Input Grid",
-            "```",
-            str(result["grid_input"]),
-            "```",
-            "\n## Predicted Grid",
-            "```",
-            str(result["grid_pred"]),
-            "```",
-            "\n## Target Grid",
-            "```",
-            str(result["grid_target"]),
-            "```",
-            "\n## Grid Diff",
-            "```",
-            str(result["grid_diff"]),
-            "```",
-        ])
-        with open(path, "w") as fh:
-            fh.write("\n".join(lines))
-    else:
-        raise ValueError("Unsupported dump file format: use .json or .md")
+def _maybe_show_solutions(task_id: str, solutions_file: Optional[Path]) -> None:
+    if solutions_file is None or not solutions_file.exists():
+        return
+    sol_bundle = json.load(open(solutions_file, "r"))
+    if task_id not in sol_bundle:
+        print("⚠️  Task not found in solutions bundle.")
+        return
+    print("\n🎯 Official ground-truth test grid(s):")
+    for idx, grid in enumerate(sol_bundle[task_id], 1):
+        print(f"  • Test {idx}:")
+        for row in grid:
+            print("   ", row)
 
 
+# ────────────────────────────────────────────────────────────
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run MGEL Debug View")
-    parser.add_argument("--task_id", type=str, help="Task ID to load (e.g., '5bd6f4ac')")
-    parser.add_argument(
-        "--data_dir",
-        type=Path,
-        default=Path("arc_solver/tests"),
-        help="Directory containing ARC task JSON files",
-    )
-    parser.add_argument(
-        "--manual_input",
-        type=Path,
-        help="Path to JSON file containing an input matrix",
-    )
-    parser.add_argument(
-        "--manual_target",
-        type=Path,
-        help="Path to JSON file containing a target matrix",
-    )
-    parser.add_argument(
-        "--dump_to",
-        type=Path,
-        help="Write evaluation summary to this file (.json or .md)",
-    )
-    parser.add_argument(
-        "--batch_dir",
-        type=Path,
-        help="Directory of tasks for batch evaluation (TODO)",
-    )
-    parser.add_argument(
-        "--color",
-        action="store_true",
-        help="Print grids using ANSI color codes",
-    )
-    parser.add_argument(
-        "--step_by_step",
-        action="store_true",
-        help="Apply rules one by one with intermediate grids",
-    )
-    parser.add_argument("--trace", action="store_true", help="Print introspection trace summary")
-    parser.add_argument(
-        "--perceptual",
-        action="store_true",
-        help="Use visual perceptual scoring instead of raw .compare_to()",
-    )
-    args = parser.parse_args()
+    p = argparse.ArgumentParser("MGEL symbolic debug viewer")
+    p.add_argument("--task_id", required=True)
+    p.add_argument("--data_dir", type=Path)
+    p.add_argument("--data_file", type=Path)
+    p.add_argument("--solutions_file", type=Path)
+    p.add_argument("--color", action="store_true")
+    p.add_argument("--step_by_step", action="store_true")
+    p.add_argument("--trace", action="store_true")
+    args = p.parse_args()
 
-    # manual matrix injection overrides task loading
-    if args.manual_input or args.manual_target:
-        if not (args.manual_input and args.manual_target):
-            raise ValueError("Both --manual_input and --manual_target must be provided")
-        try:
-            with open(args.manual_input) as f:
-                input_matrix = json.load(f)
-            with open(args.manual_target) as f:
-                target_matrix = json.load(f)
-        except Exception as e:
-            raise RuntimeError(f"Failed to load manual matrices: {e}")
-        input_grid = Grid(input_matrix)
-        target_grid = Grid(target_matrix)
-        task_id = "MANUAL_INJECTION"
-    elif args.task_id:
-        input_grid, target_grid = load_single_task(args.task_id, args.data_dir)
-        task_id = args.task_id
-    else:
-        input_matrix = [
-            [0, 0, 0],
-            [1, 2, 3],
-            [0, 0, 0],
-        ]
-        target_matrix = [
-            [3, 3, 3],
-            [1, 2, 3],
-            [3, 3, 3],
-        ]
-        input_grid = Grid(input_matrix)
-        target_grid = Grid(target_matrix)
-        task_id = "MANUAL_INJECTION"
+    if args.trace:
+        logging.basicConfig(level=logging.DEBUG)
+
+    inp_grid, tgt_grid = _load_single_task(
+        args.task_id, args.data_dir, args.data_file
+    )
 
     print("=" * 40)
-    print(f"TASK {task_id} :: MGEL Symbolic Debug Trace")
+    print(f"TASK {args.task_id}  —  MGEL Debug Trace")
     print("=" * 40)
-    print_grid("Input Grid", input_grid, use_color=args.color)
-    print_grid("Target Grid", target_grid, use_color=args.color)
+    _print_grid("Input", inp_grid, args.color)
+    _print_grid("Target", tgt_grid, args.color)
 
-    print("\n\U0001F9E0 Extracting Symbolic Rules...")
-    rule_programs = abstract([input_grid, target_grid])
+    print("\n🧠  Extracting symbolic rules …")
+    rule_programs = abstract([inp_grid, tgt_grid])
+    print(f"Found {len(rule_programs)} rules")
 
     if not rule_programs:
-        print("\u274C No symbolic rules extracted.")
+        print("❌ No symbolic rules extracted.")
         return
 
-    best_result = None
     best_score = -1.0
+    best_pred: Optional[Grid] = None
 
-    for idx, rule in enumerate(rule_programs):
-        print(f"\nRule {idx + 1}:")
-        print(" \u25AA", rule_to_dsl(rule))
+    for idx, rule in enumerate(rule_programs, 1):
+        print(f"\nRule {idx}: {rule_to_dsl(rule)}")
+        try:
+            pred = simulate_rules(inp_grid, [rule])
+        except Exception as err:  # pylint: disable=broad-except
+            print("   ⚠️  Simulation error:", err)
+            continue
 
         if args.step_by_step:
-            working_grid = Grid([row[:] for row in input_grid.data])
-            dsl = rule_to_dsl(rule)
-            zone = rule.condition.get("zone")
-            print(
-                f" \u25AA Rule: {dsl} | Zone: {zone} | Type: {rule.__class__.__name__}"
-            )
-            try:
-                working_grid = simulate_rules(working_grid, [rule])
-                print("    \u2705 Rule applied successfully")
-                print_grid(
-                    "Intermediate Grid", working_grid, use_color=args.color
-                )
-            except Exception as e:
-                print(f"    \u274C Rule failed: {e}")
-        try:
-            pred_grid = simulate_rules(input_grid, [rule])
-            print_grid("Predicted Grid", pred_grid, use_color=args.color)
-            score = (
-                perceptual_similarity_score(pred_grid, target_grid)
-                if args.perceptual
-                else pred_grid.compare_to(target_grid)
-            )
-            diff = pred_grid.diff_summary(target_grid)
-            sym_score = pred_grid.compare_to(target_grid)
-            per_score = perceptual_similarity_score(pred_grid, target_grid)
-            print(
-                f"\u2705 Prediction Score: {score:.3f}"
-            )
-            print(
-                f"\U0001F9E0 Symbolic Score: {sym_score:.3f} | Visual Perceptual Score: {per_score:.3f}"
-            )
-            print_grid_diff(pred_grid, target_grid, use_color=args.color)
-            metrics = {}
-            if args.trace:
-                try:
-                    from arc_solver.src.introspection import build_trace, validate_trace
-                    trace = build_trace(rule, input_grid, pred_grid, target_grid)
-                    metrics = validate_trace(trace)
-                    print(
-                        " Trace Summary:",
-                        f"coverage={metrics['coverage_score']:.2f},",
-                        f"conflicts={metrics['conflict_flags']}",
-                    )
-                except Exception as ie:
-                    print(f"    Trace unavailable: {ie}")
-                    metrics = {}
+            _print_grid("Predicted (step)", pred, args.color)
 
-            diff_grid = [["✓" if a == b else "✗" for a, b in zip(pr, tg)] for pr, tg in zip(pred_grid.data, target_grid.data)]
-            candidate = {
-                "task_id": task_id,
-                "rules": [rule_to_dsl(rule)],
-                "prediction_score": score,
-                "grid_input": input_grid.data,
-                "grid_pred": pred_grid.data,
-                "grid_target": target_grid.data,
-                "trace_summary": metrics if metrics else {},
-                "grid_diff": diff_grid,
-                "diff_summary": diff,
-            }
-            if score > best_score:
-                best_result = candidate
-                best_score = score
-        except Exception as exc:
-            print(f"\u1F6D1 Rule simulation failed with error: {exc}")
+        score = pred.compare_to(tgt_grid)
+        print(f"   Score = {score:.3f}")
 
-    if args.dump_to and best_result:
-        try:
-            dump_output(best_result, args.dump_to)
-            print(f"\u2705 Output dumped to {args.dump_to}")
-        except Exception as de:
-            print(f"\u274C Failed to dump output: {de}")
+        if score > best_score:
+            best_score = score
+            best_pred = pred
+
+    if best_pred is not None:
+        print("\n✅  Best prediction diff:")
+        _print_diff(best_pred, tgt_grid)
+    else:
+        print("❌  No successful simulation.")
+
+    _maybe_show_solutions(args.task_id, args.solutions_file)
 
 
 if __name__ == "__main__":
