@@ -16,18 +16,23 @@ def build_submission_json(
 ) -> dict:
     """Return a submission dictionary compatible with the ARC AGI leaderboard."""
 
-    submission: Dict[str, Dict[str, List[List[List[int]]]]] = {}
+    submission: Dict[str, List[Dict[str, List[List[int]]]]] = {}
     logger = logging.getLogger("submission_builder")
     assert predictions, "Predictions dictionary is empty"
     for task in tasks:
-        outputs: List[List[List[int]]] = []
+        outputs: List[Dict[str, List[List[int]]]] = []
         for i in range(len(task.test)):
             key = (task.task_id, i)
             if key not in predictions:
                 raise KeyError(f"Missing prediction for {task.task_id} index {i}")
             pred = predictions[key]
-            if isinstance(pred, dict) and "output" in pred:
-                pred = pred["output"]
+            if isinstance(pred, dict):
+                if "output" in pred:
+                    pred = pred["output"]
+                elif "attempt_1" in pred and "attempt_2" in pred:
+                    pred = [pred["attempt_1"], pred["attempt_2"]]
+                else:
+                    pred = list(pred.values())
 
             grids: List[List[List[int]]]
             if isinstance(pred, Grid):
@@ -77,9 +82,13 @@ def build_submission_json(
             if len(fixed_grids) > 2:
                 fixed_grids = fixed_grids[:2]
 
-            outputs.append(fixed_grids)
+            attempt = {
+                "attempt_1": fixed_grids[0],
+                "attempt_2": fixed_grids[1],
+            }
+            outputs.append(attempt)
 
-        submission[task.task_id] = {"output": outputs}
+        submission[task.task_id] = outputs
     return submission
 
 __all__ = ["build_submission_json"]
