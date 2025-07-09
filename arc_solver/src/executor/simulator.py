@@ -116,6 +116,63 @@ def visualize_uncertainty(uncertainty_grid: list[list[int]], output_path: str = 
         logger.warning(f"Could not visualize uncertainty: {exc}")
 
 
+def validate_color_dependencies(
+    rules: List[SymbolicRule | CompositeRule],
+    grid: Grid,
+    *,
+    logger: logging.Logger | None = None,
+    strict: bool = False,
+) -> List[SymbolicRule | CompositeRule]:
+    """Return ``rules`` filtered by available colors.
+
+    The grid is simulated in a copy to track which colors remain after each
+    rule application. Rules whose required source colors are missing are
+    skipped and a warning is logged. When ``strict`` is ``True`` the function
+    aborts on the first invalid rule by raising ``ValueError``.
+    """
+
+    working = Grid([row[:] for row in grid.data])
+    color_presence = {v for row in working.data for v in row}
+    lineage: dict[int, str] = {}
+    valid: list[SymbolicRule | CompositeRule] = []
+
+    for rule in rules:
+        src_syms = rule.get_sources() if isinstance(rule, CompositeRule) else rule.source
+        required: set[int] = set()
+        for s in src_syms:
+            if s.type is SymbolType.COLOR:
+                try:
+                    required.add(int(s.value))
+                except Exception:
+                    continue
+
+        missing = [c for c in required if c not in color_presence]
+        if missing:
+            for c in missing:
+                info = f"; removed by prior rule '{lineage[c]}'" if c in lineage else ""
+                if logger:
+                    logger.warning(
+                        f"Rule '{rule}' skipped – source color {c} no longer present{info}"
+                    )
+            if strict:
+                raise ValueError(f"Missing colors for rule: {rule}")
+            continue
+
+        before = {v for row in working.data for v in row}
+        try:
+            working = safe_apply_rule(rule, working, perform_checks=False)
+        except Exception:
+            pass
+        after = {v for row in working.data for v in row}
+        removed = before - after
+        for col in removed:
+            lineage[col] = str(rule)
+        color_presence = after
+        valid.append(rule)
+
+    return valid
+
+
 def check_symmetry_break(rule: SymbolicRule, grid: Grid, attention_mask: Optional[list[list[bool]]] = None) -> Grid:
     after = safe_apply_rule(rule, grid, attention_mask, perform_checks=False)
     if violates_symmetry(after, grid):
@@ -448,6 +505,7 @@ def simulate_rules(
     trace_log: list[dict] | None = None,
     uncertainty_grid: list[list[int]] | None = None,
     conflict_policy: str | None = None,
+    strict: bool = False,
 ) -> Grid:
     """Apply a list of symbolic rules to ``input_grid`` with reflex checks."""
     # Determine execution order based on rule dependencies and spatial topology
@@ -463,6 +521,9 @@ def simulate_rules(
         logger.debug(
             "simulate_rules received %d rules, %d composite (%.2f)", total, comp, ratio
         )
+
+    # Validate color dependencies before simulation
+    rules = validate_color_dependencies(rules, input_grid, logger=logger, strict=strict)
 
     grid = Grid([row[:] for row in input_grid.data])
     # Pre-compute rule coverage and sort rules by descending impact
@@ -685,6 +746,7 @@ __all__ = [
     "validate_rule_application",
     "check_symmetry_break",
     "visualize_uncertainty",
+    "validate_color_dependencies",
     "simulate_composite_rule",
     "simulate_composite_safe",
 ]
