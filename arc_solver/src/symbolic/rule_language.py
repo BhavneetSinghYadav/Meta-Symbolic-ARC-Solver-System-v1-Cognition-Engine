@@ -166,6 +166,7 @@ class CompositeRule:
         """Return merged target symbols across all steps."""
         return list({s for step in self.steps for s in getattr(step, "target", [])})
 
+
     def get_condition(self) -> Optional[Any]:
         """Return the first non-null condition among steps."""
         for step in self.steps:
@@ -193,6 +194,13 @@ class CompositeRule:
         return self.to_string()
 
 
+def final_targets(rule: CompositeRule) -> List[Symbol]:
+    """Return target symbols from the final step of ``rule``."""
+    if not rule.steps:
+        return []
+    return list(getattr(rule.steps[-1], "target", []))
+
+
 __all__ = [
     "parse_rule",
     "rule_to_dsl",
@@ -201,4 +209,5 @@ __all__ = [
     "validate_color_range",
     "clean_dsl_string",
     "CompositeRule",
+    "final_targets",
 ]

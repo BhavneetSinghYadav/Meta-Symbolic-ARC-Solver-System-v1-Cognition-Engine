@@ -8,7 +8,7 @@ from arc_solver.src.symbolic.vocabulary import (
     SymbolicRule,
     TransformationType,
 )
-from arc_solver.src.symbolic.rule_language import CompositeRule
+from arc_solver.src.symbolic.rule_language import CompositeRule, final_targets
 
 
 class RuleDependencyGraph:
@@ -32,7 +32,7 @@ def rule_dependency_graph(rules: List[Union[SymbolicRule, CompositeRule]]) -> Di
 
     graph: Dict[int, Set[int]] = {}
     for i, r1 in enumerate(rules):
-        s1 = r1.get_targets() if isinstance(r1, CompositeRule) else r1.target
+        s1 = final_targets(r1) if isinstance(r1, CompositeRule) else r1.target
         t1_colors = {s.value for s in s1 if s.type is SymbolType.COLOR}
         deps: Set[int] = set()
         for j, r2 in enumerate(rules):
