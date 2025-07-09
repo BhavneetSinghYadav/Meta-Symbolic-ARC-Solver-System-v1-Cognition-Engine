@@ -89,7 +89,24 @@ def run(bundle: str, task_id: str) -> None:
     print(f"abstract total {len(final_rules)}")
 
     if final_rules:
-        scores = [score_rule(inp, out, r) for r in final_rules]
+        scores = []
+        for r in final_rules:
+            s = score_rule(inp, out, r, prefer_composites=True)
+            scores.append(s)
+            try:
+                if isinstance(r, CompositeRule):
+                    pred = simulate_composite_rule(inp, r)
+                else:
+                    pred = simulate_rules(inp, [r])
+                raw = pred.compare_to(out)
+                before = inp.compare_to(out)
+                desc = r.to_string() if isinstance(r, CompositeRule) else str(r)
+                print(
+                    f"rule {desc} raw={raw:.3f} adj={s:.3f} gain={raw - before:.3f}"
+                )
+            except Exception:
+                desc = r.to_string() if isinstance(r, CompositeRule) else str(r)
+                print(f"rule {desc} failed to simulate")
         print(f"top_score {max(scores):.3f}")
         hist = {}
         for r in final_rules:

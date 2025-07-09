@@ -46,31 +46,55 @@ def preferred_rule_types(input_grid: Grid, output_grid: Grid) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
-def score_rule(input_grid: Grid, output_grid: Grid, rule: SymbolicRule | CompositeRule) -> float:
-    """Return heuristic score of ``rule`` for transforming ``input_grid`` to ``output_grid``."""
+def score_rule(
+    input_grid: Grid,
+    output_grid: Grid,
+    rule: SymbolicRule | CompositeRule,
+    *,
+    prefer_composites: bool = False,
+) -> float:
+    """Return heuristic score of ``rule`` for transforming ``input_grid`` to ``output_grid``.
+
+    ``prefer_composites`` can be toggled to soften complexity penalties for multi step
+    rules when experimenting with ranking strategies.
+    """
 
     try:
         if isinstance(rule, CompositeRule):
             pred = rule.simulate(input_grid)
+            steps = len(rule.steps)
         else:
             pred = simulate_rules(input_grid, [rule])
+            steps = 1
     except Exception:
         return 0.0
 
-    pixel = pred.compare_to(output_grid)
+    before_pixel = input_grid.compare_to(output_grid)
+    after_pixel = pred.compare_to(output_grid)
     diff = pred.diff_summary(output_grid)
     zone_match = diff.get("zone_coverage_match", 0.0)
     shape_bonus = 1.0 if pred.shape() == output_grid.shape() else 0.0
 
-    base = 0.6 * pixel + 0.3 * zone_match + 0.1 * shape_bonus
+    # Basic similarity score
+    base = 0.6 * after_pixel + 0.3 * zone_match + 0.1 * shape_bonus
 
-    # Penalize complex rules
+    # Reward improvement over the input similarity
+    improvement = after_pixel - before_pixel
+    if improvement > 0:
+        base += 0.2 * improvement
+
+    # Penalize complex rules (softer for composites)
     from arc_solver.src.abstractions.rule_generator import rule_cost
+    complexity = rule_cost(rule)
+    penalty = 0.05 * complexity
     if isinstance(rule, CompositeRule):
-        complexity = len(rule.steps)
-    else:
-        complexity = rule_cost(rule)
-    final = base - 0.05 * complexity
+        penalty /= steps if prefer_composites else 1.0
+
+    final = base - penalty
+    if final < 0.0:
+        final = 0.0
+    if final > 1.0:
+        final = 1.0
     return final
 
 
