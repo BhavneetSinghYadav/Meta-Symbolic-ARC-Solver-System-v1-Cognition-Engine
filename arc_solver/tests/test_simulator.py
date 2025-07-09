@@ -1,8 +1,15 @@
 import logging
 from arc_solver.src.core.grid import Grid
-from arc_solver.src.executor.simulator import simulate_rules
+from arc_solver.src.executor.simulator import simulate_rules, validate_color_dependencies
 import pytest
-from arc_solver.src.symbolic.vocabulary import Symbol, SymbolType, SymbolicRule, Transformation, TransformationType
+from arc_solver.src.symbolic.vocabulary import (
+    Symbol,
+    SymbolType,
+    SymbolicRule,
+    Transformation,
+    TransformationType,
+)
+from arc_solver.src.symbolic.rule_language import CompositeRule
 
 
 def test_replace_missing_source(caplog):
@@ -52,3 +59,22 @@ def test_color_dependency_strict():
     )
     with pytest.raises(ValueError):
         simulate_rules(grid, [r1, r2], strict=True)
+
+
+def test_composite_chain_validation_accept():
+    grid = Grid([[1]])
+
+    step1 = SymbolicRule(
+        transformation=Transformation(TransformationType.REPLACE),
+        source=[Symbol(SymbolType.COLOR, "1")],
+        target=[Symbol(SymbolType.COLOR, "2")],
+    )
+    step2 = SymbolicRule(
+        transformation=Transformation(TransformationType.REPLACE),
+        source=[Symbol(SymbolType.COLOR, "2")],
+        target=[Symbol(SymbolType.COLOR, "3")],
+    )
+    comp = CompositeRule([step1, step2])
+
+    validated = validate_color_dependencies([comp], grid)
+    assert validated == [comp]
