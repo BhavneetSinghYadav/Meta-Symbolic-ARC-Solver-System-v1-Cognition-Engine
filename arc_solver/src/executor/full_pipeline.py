@@ -37,7 +37,9 @@ from arc_solver.src.memory.deep_prior_loader import (
 from arc_solver.src.introspection.visual_scoring import rerank_by_visual_score
 from arc_solver.src.meta_generalizer import generalize_rule_program
 from arc_solver.src.symbolic.rule_language import parse_rule
-from arc_solver.src.executor.fallback_predictor import predict as fallback_predict
+from arc_solver.src.executor.fallback_predictor import predict as base_fallback_predict
+
+fallback_predict = base_fallback_predict
 from arc_solver.src.introspection import (
     build_trace,
     inject_feedback,
@@ -82,6 +84,13 @@ def solve_task(
         log_file = f"{log_dir}/{ident}.log"
         logger = get_logger(f"solver.{ident}", file_path=log_file)
 
+    fallback_count = 0
+
+    def _fallback(grid: Grid) -> Grid:
+        nonlocal fallback_count
+        fallback_count += 1
+        return fallback_predict(grid)
+
     # Regime detection -----------------------------------------------------
     from arc_solver.src.regime.regime_classifier import (
         compute_task_signature,
@@ -117,9 +126,13 @@ def solve_task(
                     try:
                         preds.append(simulate_rules(g, prior_sets[0], logger=logger))
                     except Exception:
-                        preds.append(fallback_predict(g))
+                        preds.append(_fallback(g))
+                if logger:
+                    logger.debug(f"fallback_triggers={fallback_count}")
                 return preds, test_outputs, [], prior_sets[0]
-        predictions = [fallback_predict(g) for g in test_inputs]
+        predictions = [_fallback(g) for g in test_inputs]
+        if logger:
+            logger.debug(f"fallback_triggers={fallback_count}")
         return predictions, test_outputs, [], []
 
     if policy == "memory_then_fallback":
@@ -136,9 +149,13 @@ def solve_task(
                 try:
                     preds.append(simulate_rules(g, try_rules, logger=logger))
                 except Exception:
-                    preds.append(fallback_predict(g))
+                    preds.append(_fallback(g))
+            if logger:
+                logger.debug(f"fallback_triggers={fallback_count}")
             return preds, test_outputs, [], try_rules
-        predictions = [fallback_predict(g) for g in test_inputs]
+        predictions = [_fallback(g) for g in test_inputs]
+        if logger:
+            logger.debug(f"fallback_triggers={fallback_count}")
         return predictions, test_outputs, [], []
 
     if policy == "fallback_then_prior":
@@ -153,9 +170,13 @@ def solve_task(
                     try:
                         preds.append(simulate_rules(g, prior_sets[0], logger=logger))
                     except Exception:
-                        preds.append(fallback_predict(g))
+                        preds.append(_fallback(g))
+                if logger:
+                    logger.debug(f"fallback_triggers={fallback_count}")
                 return preds, test_outputs, [], prior_sets[0]
-        predictions = [fallback_predict(g) for g in test_inputs]
+        predictions = [_fallback(g) for g in test_inputs]
+        if logger:
+            logger.debug(f"fallback_triggers={fallback_count}")
         return predictions, test_outputs, [], []
 
     rule_sets: List[List] = []
@@ -176,7 +197,9 @@ def solve_task(
     if not rule_sets:
         if logger:
             logger.warning("no rules extracted; using fallback")
-        predictions = [fallback_predict(g) for g in test_inputs]
+        predictions = [_fallback(g) for g in test_inputs]
+        if logger:
+            logger.debug(f"fallback_triggers={fallback_count}")
         return predictions, test_outputs, [], []
 
     # Inject motifs before ranking -------------------------------------------
@@ -205,7 +228,9 @@ def solve_task(
     if not best_rules:
         if logger:
             logger.warning("no candidate rules; using fallback predictor")
-        predictions = [fallback_predict(g) for g in test_inputs]
+        predictions = [_fallback(g) for g in test_inputs]
+        if logger:
+            logger.debug(f"fallback_triggers={fallback_count}")
         return predictions, test_outputs, [], []
 
     # Recall programs from memory or priors ---------------------------------
@@ -236,7 +261,7 @@ def solve_task(
             except Exception:
                 if logger:
                     logger.warning("training simulation failed; using fallback")
-                pred = fallback_predict(inp)
+                pred = _fallback(inp)
             total += pred.compare_to(out)
         return total / len(train_pairs)
 
@@ -291,7 +316,8 @@ def solve_task(
             except Exception as e:
                 if logger:
                     logger.warning(f"Trace failed: {e}")
-                return [fallback_predict(g) for g in test_inputs], test_outputs, traces, best_rules
+                    logger.debug(f"fallback_triggers={fallback_count}")
+                return [_fallback(g) for g in test_inputs], test_outputs, traces, best_rules
             feedback = inject_feedback(trace)
             candidates = llm_refine_program(trace, feedback)
             refined = evaluate_refinements(candidates, inp0, out0)
@@ -308,7 +334,8 @@ def solve_task(
     if not top_sets:
         if logger:
             logger.warning("no prioritized rule sets; using fallback predictions")
-        return [fallback_predict(g) for g in test_inputs], test_outputs, traces, best_rules
+            logger.debug(f"fallback_triggers={fallback_count}")
+        return [_fallback(g) for g in test_inputs], test_outputs, traces, best_rules
     for g in test_inputs:
         cand_preds = []
         for rs in top_sets:
@@ -323,7 +350,7 @@ def solve_task(
             except Exception:
                 if logger:
                     logger.warning("simulation error, skipping rule set")
-                cand_preds.append(fallback_predict(g))
+                cand_preds.append(_fallback(g))
         if not cand_preds:
             try:
                 cand_preds.append(simulate_rules(g, simple_fallback, logger=logger))
@@ -335,7 +362,7 @@ def solve_task(
                     if logger:
                         logger.info("used copy-train heuristic")
                 else:
-                    cand_preds.append(fallback_predict(g))
+                    cand_preds.append(_fallback(g))
                     if logger:
                         logger.info("used dummy fallback predictor")
         try:
@@ -343,7 +370,7 @@ def solve_task(
         except Exception as exc:
             if logger:
                 logger.warning("soft vote failed: %s", exc)
-            final = fallback_predict(g)
+            final = _fallback(g)
         predictions.append(final)
 
     # Persist best performing program
@@ -400,8 +427,10 @@ def solve_task(
         except Exception as exc:
             if logger:
                 logger.error("failed to write failure log: %s", exc)
-        predictions = [fallback_predict(g) for g in test_inputs]
+        predictions = [_fallback(g) for g in test_inputs]
 
+    if logger:
+        logger.debug(f"fallback_triggers={fallback_count}")
     return predictions, test_outputs, traces, best_rules
 
 
@@ -418,7 +447,7 @@ def solve_task_iterative(task: dict, *, steps: int = 3, introspect: bool = False
             try:
                 grid = simulate_symbolic_program(grid, rules)
             except Exception:
-                grid = fallback_predict(grid)
+                grid = _fallback(grid)
         refined_preds.append(grid)
     return refined_preds, outs, traces, rules
 
