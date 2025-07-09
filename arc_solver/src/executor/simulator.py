@@ -669,6 +669,7 @@ def safe_apply_rule(
     perform_checks: bool = True,
     *,
     lineage_tracker: ColorLineageTracker | None = None,
+    task_id: str | None = None,
 ) -> Grid:
     """Apply ``rule`` safely, returning ``grid`` unchanged on failure."""
     logger.debug(f"Executing rule: {rule}")
@@ -682,9 +683,23 @@ def safe_apply_rule(
         )
     except IndexError as exc:
         logger.warning(f"IndexError applying rule {rule}: {exc}")
+        log_rule_failure(
+            rule,
+            failure_type="IndexError",
+            message=str(exc),
+            grid_snapshot=grid.data,
+            task_id=task_id,
+        )
         return grid
     except Exception as exc:  # pragma: no cover - catch-all
         logger.warning(f"Rule application failed: {rule} — {exc}")
+        log_rule_failure(
+            rule,
+            failure_type="Exception",
+            message=str(exc),
+            grid_snapshot=grid.data,
+            task_id=task_id,
+        )
         return grid
 
 
