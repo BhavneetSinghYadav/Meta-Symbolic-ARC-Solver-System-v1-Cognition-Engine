@@ -8,6 +8,12 @@ import math
 
 from collections import Counter, defaultdict
 from arc_solver.src.utils.logger import get_logger
+from arc_solver.simulator import (
+    log_rule_failure,
+    rule_failures_log,
+    summarize_skips_by_type,
+    ColorLineageTracker,
+)
 from arc_solver.src.symbolic.vocabulary import validate_color_range, MAX_COLOR
 from arc_solver.src.symbolic.rule_language import CompositeRule
 from arc_solver.src.utils import config_loader
@@ -236,7 +242,11 @@ def breaks_training_constraint(after: Grid) -> bool:
 
 
 def _apply_replace(
-    grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
+    grid: Grid,
+    rule: SymbolicRule,
+    attention_mask: Optional[List[List[bool]]] = None,
+    *,
+    lineage_tracker: ColorLineageTracker | None = None,
 ) -> Grid:
     src_color = None
     tgt_color = None
@@ -245,7 +255,14 @@ def _apply_replace(
             try:
                 src_color = int(sym.value)
             except ValueError:
-                logger.warning(f"Invalid symbol value: {sym.value}, skipping rule")
+                msg = f"Invalid symbol value: {sym.value}, skipping rule"
+                logger.warning(msg)
+                log_rule_failure(
+                    rule,
+                    failure_type="REPLACE",
+                    skipped_due_to=sym.value,
+                    message=msg,
+                )
                 return grid
             break
     for sym in rule.target:
@@ -253,15 +270,40 @@ def _apply_replace(
             try:
                 tgt_color = int(sym.value)
             except ValueError:
-                logger.warning(f"Invalid symbol value: {sym.value}, skipping rule")
+                msg = f"Invalid symbol value: {sym.value}, skipping rule"
+                logger.warning(msg)
+                log_rule_failure(
+                    rule,
+                    failure_type="REPLACE",
+                    skipped_due_to=sym.value,
+                    message=msg,
+                )
                 return grid
             break
     if src_color is None or tgt_color is None:
+        log_rule_failure(rule, failure_type="REPLACE", message="missing parameters")
         return grid
     if not validate_color_range(tgt_color):
+        log_rule_failure(
+            rule,
+            failure_type="REPLACE",
+            skipped_due_to=tgt_color,
+            message="target color out of range",
+        )
         return grid
     if not _grid_contains(grid, src_color):
-        logger.warning(f"Source color {src_color} not found; skipping rule")
+        info = None
+        if lineage_tracker and src_color in lineage_tracker.removed_by:
+            info = lineage_tracker.get_lineage(src_color)
+        msg = f"source color {src_color} not found"
+        logger.warning(msg + "; skipping rule")
+        log_rule_failure(
+            rule,
+            failure_type="REPLACE",
+            skipped_due_to=src_color,
+            message=msg,
+            lineage=info,
+        )
         return grid
 
     h, w = grid.shape()
@@ -286,6 +328,11 @@ def _apply_translate(
         dx = int(rule.transformation.params.get("dx", "0"))
         dy = int(rule.transformation.params.get("dy", "0"))
     except ValueError:
+        log_rule_failure(
+            rule,
+            failure_type="TRANSLATE",
+            message="invalid translation parameters",
+        )
         return grid
     h, w = grid.shape()
     new_data = [[0 for _ in range(w)] for _ in range(h)]
@@ -317,6 +364,11 @@ def _apply_repeat(
         kx = int(rule.transformation.params.get("kx", "1"))
         ky = int(rule.transformation.params.get("ky", "1"))
     except ValueError:
+        log_rule_failure(
+            rule,
+            failure_type="REPEAT",
+            message="invalid repeat parameters",
+        )
         return grid
     from arc_solver.src.symbolic.repeat_rule import repeat_tile
 
@@ -348,7 +400,14 @@ def _apply_conditional(
             try:
                 src_color = int(sym.value)
             except Exception:
-                logger.warning(f"Invalid symbol value: {sym.value}, skipping rule")
+                msg = f"Invalid symbol value: {sym.value}, skipping rule"
+                logger.warning(msg)
+                log_rule_failure(
+                    rule,
+                    failure_type="CONDITIONAL",
+                    skipped_due_to=sym.value,
+                    message=msg,
+                )
                 return grid
         elif sym.type is SymbolType.ZONE:
             # zone scoping is handled in _apply_region
@@ -358,9 +417,17 @@ def _apply_conditional(
             try:
                 tgt_color = int(sym.value)
             except Exception:
-                logger.warning(f"Invalid symbol value: {sym.value}, skipping rule")
+                msg = f"Invalid symbol value: {sym.value}, skipping rule"
+                logger.warning(msg)
+                log_rule_failure(
+                    rule,
+                    failure_type="CONDITIONAL",
+                    skipped_due_to=sym.value,
+                    message=msg,
+                )
                 return grid
     if src_color is None or tgt_color is None:
+        log_rule_failure(rule, failure_type="CONDITIONAL", message="missing parameters")
         return grid
 
     h, w = grid.shape()
@@ -389,10 +456,15 @@ def _apply_conditional(
 
 
 def _apply_region(
-    grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
+    grid: Grid,
+    rule: SymbolicRule,
+    attention_mask: Optional[List[List[bool]]] = None,
+    *,
+    lineage_tracker: ColorLineageTracker | None = None,
 ) -> Grid:
     """Apply a rule only to cells within a labelled region overlay."""
     if grid.overlay is None:
+        log_rule_failure(rule, failure_type="REGION", message="no overlay present")
         return grid
     region = None
     for sym in rule.source:
@@ -400,6 +472,7 @@ def _apply_region(
             region = sym.value
             break
     if region is None:
+        log_rule_failure(rule, failure_type="REGION", message="region not specified")
         return grid
 
     inner_rule = SymbolicRule(
@@ -420,7 +493,11 @@ def _apply_region(
                 continue
             cell_grid = Grid([row[:] for row in grid.data])
             cell_grid.set(r, c, grid.get(r, c))
-            cell_grid = _apply_replace(cell_grid, inner_rule)
+            cell_grid = _apply_replace(
+                cell_grid,
+                inner_rule,
+                lineage_tracker=lineage_tracker,
+            )
             new_data[r][c] = cell_grid.get(r, c)
     return Grid(new_data)
 
@@ -444,6 +521,7 @@ def _apply_functional(
         return Grid(new_data)
     elif op == "flip_horizontal":
         return grid.flip_horizontal()
+    log_rule_failure(rule, failure_type="FUNCTIONAL", message=f"unknown op {op}")
     return grid
 
 
@@ -452,11 +530,19 @@ def safe_apply_rule(
     grid: Grid,
     attention_mask: Optional[List[List[bool]]] = None,
     perform_checks: bool = True,
+    *,
+    lineage_tracker: ColorLineageTracker | None = None,
 ) -> Grid:
     """Apply ``rule`` safely, returning ``grid`` unchanged on failure."""
     logger.debug(f"Executing rule: {rule}")
     try:
-        return _safe_apply_rule(grid, rule, attention_mask, perform_checks)
+        return _safe_apply_rule(
+            grid,
+            rule,
+            attention_mask,
+            perform_checks,
+            lineage_tracker,
+        )
     except IndexError as exc:
         logger.warning(f"IndexError applying rule {rule}: {exc}")
         return grid
@@ -470,6 +556,7 @@ def _safe_apply_rule(
     rule: SymbolicRule,
     attention_mask: Optional[List[List[bool]]] = None,
     perform_checks: bool = True,
+    lineage_tracker: ColorLineageTracker | None = None,
 ) -> Grid:
     before = Grid([row[:] for row in grid.data])
 
@@ -477,7 +564,12 @@ def _safe_apply_rule(
         after = simulate_composite_safe(grid, rule)
     elif rule.transformation.ttype is TransformationType.REPLACE:
         try:
-            after = _apply_replace(grid, rule, attention_mask)
+            after = _apply_replace(
+                grid,
+                rule,
+                attention_mask,
+                lineage_tracker=lineage_tracker,
+            )
         except Exception as e:
             logger.warning(f"Rule application failed: {rule} — {e}")
             return grid
@@ -487,11 +579,16 @@ def _safe_apply_rule(
         after = _apply_repeat(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.COMPOSITE:
         after = _apply_repeat(grid, rule, attention_mask)
-        after = _apply_replace(after, rule, attention_mask)
+        after = _apply_replace(after, rule, attention_mask, lineage_tracker=lineage_tracker)
     elif rule.transformation.ttype is TransformationType.CONDITIONAL:
         after = _apply_conditional(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.REGION:
-        after = _apply_region(grid, rule, attention_mask)
+        after = _apply_region(
+            grid,
+            rule,
+            attention_mask,
+            lineage_tracker=lineage_tracker,
+        )
     elif rule.transformation.ttype is TransformationType.FUNCTIONAL:
         after = _apply_functional(grid, rule, attention_mask)
     else:
@@ -711,6 +808,20 @@ def simulate_rules(
         if logger:
             logger.warning("simulation produced invalid grid; returning copy")
         grid = Grid([row[:] for row in input_grid.data])
+
+    if rule_failures_log:
+        print("SKIP REPORT SUMMARY")
+        summary = summarize_skips_by_type()
+        for msg, count in list(summary.items())[:3]:
+            print(f"{msg}: {count}")
+        tasks = {
+            entry.get("task_id")
+            for entry in rule_failures_log
+            if entry.get("task_id") is not None
+        }
+        if tasks:
+            print(f"Affected tasks: {sorted(tasks)}")
+
     return grid
 
 
