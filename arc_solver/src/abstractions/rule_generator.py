@@ -8,9 +8,12 @@ from arc_solver.src.utils import config_loader
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import SymbolicRule, TransformationType
+from arc_solver.src.symbolic.rule_language import CompositeRule
 
 
-def generalize_rules(rules: List[SymbolicRule]) -> List[SymbolicRule]:
+def generalize_rules(
+    rules: List[SymbolicRule | CompositeRule],
+) -> List[SymbolicRule | CompositeRule]:
     """Return a deduplicated list of rules.
 
     For now the generalization step simply removes duplicate rules while
@@ -71,10 +74,12 @@ def normalize_rule_dsl(dsl: str) -> str:
     return dsl.replace(" ", "").replace("zone=", "Z=").replace("color=", "C=")
 
 
-def remove_duplicate_rules(rules: List[SymbolicRule]) -> List[SymbolicRule]:
+def remove_duplicate_rules(
+    rules: List[SymbolicRule | CompositeRule],
+) -> List[SymbolicRule | CompositeRule]:
     """Return rule list with semantic duplicates removed."""
     seen_hashes = set()
-    deduped: List[SymbolicRule] = []
+    deduped: List[SymbolicRule | CompositeRule] = []
     for rule in rules:
         h = hash(normalize_rule_dsl(rule_to_dsl(rule)))
         if h not in seen_hashes:
@@ -83,8 +88,10 @@ def remove_duplicate_rules(rules: List[SymbolicRule]) -> List[SymbolicRule]:
     return deduped
 
 
-def rule_cost(rule: SymbolicRule) -> float:
+def rule_cost(rule: SymbolicRule | CompositeRule) -> float:
     """Return heuristic cost of ``rule`` for sparsity ranking."""
+    if isinstance(rule, CompositeRule):
+        return sum(rule_cost(step) for step in rule.steps)
     zone_str = rule.condition.get("zone", "") if rule.condition else ""
     zone_size = len(zone_str) if isinstance(zone_str, str) else len(str(zone_str))
     transform_complexity = len(rule_to_dsl(rule).split("->")[1])
