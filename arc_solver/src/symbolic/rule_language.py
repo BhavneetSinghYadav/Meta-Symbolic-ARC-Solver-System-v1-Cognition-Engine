@@ -8,7 +8,7 @@ program parsing.
 
 from __future__ import annotations
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 import logging
 
@@ -158,8 +158,33 @@ class CompositeRule:
             out = safe_apply_rule(step, out, perform_checks=False)
         return out
 
+    def get_sources(self) -> List[Symbol]:
+        """Return merged source symbols across all steps."""
+        return list({s for step in self.steps for s in getattr(step, "source", [])})
+
+    def get_targets(self) -> List[Symbol]:
+        """Return merged target symbols across all steps."""
+        return list({s for step in self.steps for s in getattr(step, "target", [])})
+
+    def get_condition(self) -> Optional[Any]:
+        """Return the first non-null condition among steps."""
+        for step in self.steps:
+            if getattr(step, "condition", None):
+                return step.condition
+        return None
+
     def is_well_formed(self) -> bool:
-        return all(step.is_well_formed() for step in self.steps)
+        return all(getattr(step, "is_well_formed", lambda: False)() for step in self.steps)
+
+    def as_symbolic_proxy(self) -> SymbolicRule:
+        """Create a SymbolicRule-like proxy for use in dependency utilities."""
+        return SymbolicRule(
+            transformation=self.transformation,
+            source=self.get_sources(),
+            target=self.get_targets(),
+            condition=self.get_condition() or {},
+            nature=TransformationNature.SPATIAL,
+        )
 
     def to_string(self) -> str:
         return " -> ".join(str(s) for s in self.steps)

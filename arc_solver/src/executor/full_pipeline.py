@@ -36,7 +36,7 @@ from arc_solver.src.memory.deep_prior_loader import (
 )
 from arc_solver.src.introspection.visual_scoring import rerank_by_visual_score
 from arc_solver.src.meta_generalizer import generalize_rule_program
-from arc_solver.src.symbolic.rule_language import parse_rule
+from arc_solver.src.symbolic.rule_language import parse_rule, CompositeRule
 from arc_solver.src.executor.fallback_predictor import predict as base_fallback_predict
 
 fallback_predict = base_fallback_predict
@@ -187,7 +187,17 @@ def solve_task(
             rules = abstract([inp, out], logger=logger)
             rules = generalize_rules(rules)
             rules = remove_duplicate_rules(rules)
-            rules = select_independent_rules(rules)
+
+            rules_for_selection = [
+                r.as_symbolic_proxy() if isinstance(r, CompositeRule) else r
+                for r in rules
+            ]
+            selected_proxies = select_independent_rules(rules_for_selection)
+            selected_rules = []
+            for sp in selected_proxies:
+                idx = rules_for_selection.index(sp)
+                selected_rules.append(rules[idx])
+            rules = selected_rules
         except Exception:
             if logger:
                 logger.warning("abstraction exception; using simple fallback")
