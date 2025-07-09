@@ -1,8 +1,17 @@
 from __future__ import annotations
 
-"""Rule scoring and strategy utilities for the executor."""
+"""Rule scoring and strategy utilities for the executor.
+
+The scoring balances the similarity of a rule's output with the target
+against a cost-based complexity penalty.  The penalty multiplier has been
+softened so that even multi-step composite rules receive a reasonable score.
+When ``prefer_composites`` is enabled the complexity cost is further scaled by
+``1 / sqrt(steps)`` of the composite, reducing the bias against longer rule
+chains.
+"""
 
 from typing import Dict, List, Tuple
+import math
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
@@ -86,9 +95,10 @@ def score_rule(
     # Penalize complex rules (softer for composites)
     from arc_solver.src.abstractions.rule_generator import rule_cost
     complexity = rule_cost(rule)
-    penalty = 0.05 * complexity
+    penalty = 0.02 * complexity
     if isinstance(rule, CompositeRule):
-        penalty /= steps if prefer_composites else 1.0
+        if prefer_composites:
+            penalty /= math.sqrt(steps)
 
     final = base - penalty
     if final < 0.0:
