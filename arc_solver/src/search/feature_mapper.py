@@ -10,6 +10,7 @@ from arc_solver.src.symbolic.vocabulary import (
     SymbolType,
     TransformationType,
 )
+from arc_solver.src.symbolic.rule_language import CompositeRule
 
 
 def map_features(grid):
@@ -17,7 +18,7 @@ def map_features(grid):
     return []
 
 
-def rule_feature_vector(rule: SymbolicRule) -> List[float]:
+def rule_feature_vector(rule: SymbolicRule | CompositeRule) -> List[float]:
     """Return simple heuristic features for ``rule``.
 
     The vector encodes:
@@ -29,15 +30,24 @@ def rule_feature_vector(rule: SymbolicRule) -> List[float]:
     ``class_entropy``    - hashed transformation class indicator
     """
 
-    token_count = float(len(rule.source) + len(rule.target))
-    zone = 1.0 if rule.condition and rule.condition.get("zone") else 0.0
+    if isinstance(rule, CompositeRule):
+        source_syms = rule.get_sources()
+        target_syms = rule.get_targets()
+        cond = rule.get_condition() or {}
+    else:
+        source_syms = rule.source
+        target_syms = rule.target
+        cond = rule.condition
+
+    token_count = float(len(source_syms) + len(target_syms))
+    zone = 1.0 if cond and cond.get("zone") else 0.0
     color_usage = float(
-        sum(1 for s in rule.source + rule.target if s.type is SymbolType.COLOR)
+        sum(1 for s in source_syms + target_syms if s.type is SymbolType.COLOR)
     )
     shape_usage = float(
-        sum(1 for s in rule.source + rule.target if s.type is SymbolType.SHAPE)
+        sum(1 for s in source_syms + target_syms if s.type is SymbolType.SHAPE)
     )
-    position = 1.0 if rule.condition and rule.condition.get("position") else 0.0
+    position = 1.0 if cond and cond.get("position") else 0.0
 
     # Simple hashed representation of the transformation type. This is not a
     # true entropy measure but provides diversity across classes without

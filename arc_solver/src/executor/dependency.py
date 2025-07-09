@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Union
 
 from arc_solver.src.symbolic.vocabulary import (
     SymbolType,
@@ -27,34 +27,22 @@ class RuleDependencyGraph:
                     self.edges[i].add(j)
                     self.edges[j].add(i)
 
-def rule_dependency_graph(rules: List[SymbolicRule | CompositeRule]) -> Dict[int, Set[int]]:
+def rule_dependency_graph(rules: List[Union[SymbolicRule, CompositeRule]]) -> Dict[int, Set[int]]:
     """Return a directed dependency graph between rules."""
 
-    def _targets(rule: SymbolicRule | CompositeRule) -> Set[str]:
-        if isinstance(rule, CompositeRule):
-            t: Set[str] = set()
-            for step in rule.steps:
-                t.update(s.value for s in step.target if s.type is SymbolType.COLOR)
-            return t
-        return {s.value for s in rule.target if s.type is SymbolType.COLOR}
-
-    def _sources(rule: SymbolicRule | CompositeRule) -> Set[str]:
-        if isinstance(rule, CompositeRule):
-            s: Set[str] = set()
-            for step in rule.steps:
-                s.update(sy.value for sy in step.source if sy.type is SymbolType.COLOR)
-            return s
-        return {s.value for s in rule.source if s.type is SymbolType.COLOR}
-
-    graph: Dict[int, Set[int]] = defaultdict(set)
+    graph: Dict[int, Set[int]] = {}
     for i, r1 in enumerate(rules):
-        targets = _targets(r1)
+        s1 = r1.get_targets() if isinstance(r1, CompositeRule) else r1.target
+        t1_colors = {s.value for s in s1 if s.type is SymbolType.COLOR}
+        deps: Set[int] = set()
         for j, r2 in enumerate(rules):
             if i == j:
                 continue
-            sources = _sources(r2)
-            if targets & sources:
-                graph[i].add(j)
+            s2 = r2.get_sources() if isinstance(r2, CompositeRule) else r2.source
+            s2_colors = {s.value for s in s2 if s.type is SymbolType.COLOR}
+            if t1_colors & s2_colors:
+                deps.add(j)
+        graph[i] = deps
     return graph
 
 
@@ -141,14 +129,23 @@ def has_conflict(r1: SymbolicRule | CompositeRule, r2: SymbolicRule | CompositeR
     return _has_conflict_simple(r1, r2)
 
 
-def select_independent_rules(rules: List[SymbolicRule | CompositeRule]) -> List[SymbolicRule | CompositeRule]:
-    graph = RuleDependencyGraph(rules)
-    chosen: List[SymbolicRule | CompositeRule] = []
-    for idx, rule in enumerate(rules):
-        if any(j in graph.edges.get(idx, set()) for j in range(len(chosen))):
-            continue
-        chosen.append(rule)
-    return chosen
+def select_independent_rules(rules: List[Union[SymbolicRule, CompositeRule]]) -> List[Union[SymbolicRule, CompositeRule]]:
+    """Filter and return rule list with minimal dependency conflicts."""
+    graph = rule_dependency_graph(rules)
+    selected: List[Union[SymbolicRule, CompositeRule]] = []
+    visited: Set[int] = set()
+
+    def visit(idx: int) -> None:
+        if idx in visited:
+            return
+        visited.add(idx)
+        for dep in graph.get(idx, set()):
+            visit(dep)
+        selected.append(rules[idx])
+
+    for idx in range(len(rules)):
+        visit(idx)
+    return selected[::-1]
 
 
 __all__ = [

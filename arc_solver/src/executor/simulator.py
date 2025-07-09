@@ -441,7 +441,7 @@ def _safe_apply_rule(
 
 def simulate_rules(
     input_grid: Grid,
-    rules: List[SymbolicRule],
+    rules: List[SymbolicRule | CompositeRule],
     *,
     attention_mask: Optional[List[List[bool]]] = None,
     logger: logging.Logger | None = None,
@@ -466,10 +466,13 @@ def simulate_rules(
 
     grid = Grid([row[:] for row in input_grid.data])
     # Pre-compute rule coverage and sort rules by descending impact
-    coverage_pairs: list[tuple[SymbolicRule, int]] = []
+    coverage_pairs: list[tuple[SymbolicRule | CompositeRule, int]] = []
     for r in rules:
         try:
-            cov = rule_coverage(r, grid)
+            if isinstance(r, CompositeRule):
+                cov = sum(rule_coverage(step, grid) for step in r.steps)
+            else:
+                cov = rule_coverage(r, grid)
         except Exception:
             cov = 0
         coverage_pairs.append((r, cov))
@@ -492,8 +495,13 @@ def simulate_rules(
             colors = sorted({v for row in grid.data for v in row})
             logger.info(f"Applying rule {idx}: {rule}")
             logger.debug(f"Grid shape={grid.shape()}, colors={colors}")
-        valid = validate_rule_application(rule, grid)
-        zone = rule.condition.get("zone") if rule.condition else None
+        if isinstance(rule, CompositeRule):
+            valid = all(validate_rule_application(step, grid) for step in rule.steps)
+            cond = rule.get_condition() if hasattr(rule, "get_condition") else None
+        else:
+            valid = validate_rule_application(rule, grid)
+            cond = rule.condition
+        zone = cond.get("zone") if cond else None
         if not valid:
             if logger:
                 logger.warning(f"Skipping rule due to invalid context: {rule}")
@@ -569,7 +577,8 @@ def simulate_rules(
                         changed = changed_alt
                         rule = alt
         if trace_log is not None:
-            trace_log.append({"rule_id": idx, "zone": rule.condition.get("zone"), "effect": changed})
+            zone_val = cond.get("zone") if cond else None
+            trace_log.append({"rule_id": idx, "zone": zone_val, "effect": changed})
         if logger and zone:
             zone_miss = len(zone_cells) - len(changed)
             if zone_miss > 0:

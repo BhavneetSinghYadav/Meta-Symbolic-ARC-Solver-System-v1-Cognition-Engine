@@ -54,4 +54,4 @@ def test_dependency_graph_select():
         target=[Symbol(SymbolType.COLOR, "3")],
     )
     selected = select_independent_rules([r1, r2])
-    assert len(selected) == 1
+    assert selected == [r2, r1]

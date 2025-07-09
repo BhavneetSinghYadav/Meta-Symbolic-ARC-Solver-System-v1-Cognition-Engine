@@ -34,4 +34,4 @@ def test_select_independent_rules_composite():
     r2 = _color_rule(1, 3)
     comp = CompositeRule([r1])
     selected = select_independent_rules([comp, r2])
-    assert len(selected) == 1
+    assert selected == [r2, comp]
