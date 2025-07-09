@@ -38,11 +38,16 @@ logger = get_logger(__name__)
 CONFLICT_POLICY = config_loader.META_CONFIG.get("conflict_resolution", "most_frequent")
 
 
-def simulate_composite_rule(grid: Grid, rule: CompositeRule) -> Grid:
+def simulate_composite_rule(
+    grid: Grid, rule: CompositeRule, *, uncertainty_grid: list[list[int]] | None = None
+) -> Grid:
     """Apply a :class:`CompositeRule` to ``grid`` sequentially."""
     out = Grid([row[:] for row in grid.data])
     for step in rule.steps:
+        before = out
         out = safe_apply_rule(step, out, perform_checks=False)
+        if out.shape() != before.shape() and uncertainty_grid is not None:
+            _resize_grid_like(uncertainty_grid, out)
     return out
 
 
@@ -105,9 +110,35 @@ def validate_rule_application(rule: SymbolicRule, grid: Grid) -> bool:
     return True
 
 
+def _resize_grid_like(base: list[list[int]], grid: Grid) -> None:
+    """Resize ``base`` in-place to match the shape of ``grid``."""
+    h, w = grid.shape()
+    bh = len(base)
+    bw = len(base[0]) if base else 0
+    if bh < h:
+        for _ in range(h - bh):
+            base.append([0] * bw)
+    if bw < w:
+        for row in base:
+            row.extend([0] * (w - bw))
+    if bh < h and bw < w:
+        for r in range(bh, h):
+            base[r].extend([0] * (w - bw))
+
+
 def mark_conflict(loc: tuple[int, int], uncertainty_grid: list[list[int]] | None = None) -> None:
     if uncertainty_grid is not None:
         r, c = loc
+        uh = len(uncertainty_grid)
+        uw = len(uncertainty_grid[0]) if uncertainty_grid else 0
+        if r >= uh:
+            for _ in range(r - uh + 1):
+                uncertainty_grid.append([0] * uw)
+        if c >= uw:
+            for row in uncertainty_grid:
+                row.extend([0] * (c - uw + 1))
+        if r >= len(uncertainty_grid) or c >= len(uncertainty_grid[0]):
+            return
         uncertainty_grid[r][c] += 1
 
 
@@ -146,17 +177,31 @@ def validate_color_dependencies(
     for rule in rules:
         if isinstance(rule, CompositeRule):
             first_sources = rule.steps[0].source
-            required = {
-                int(s.value)
-                for s in first_sources
-                if s.type is SymbolType.COLOR
-            }
+            try:
+                required = {
+                    int(s.value)
+                    for s in first_sources
+                    if s.type is SymbolType.COLOR
+                }
+            except ValueError:
+                if logger:
+                    logger.warning(f"Rule '{rule}' skipped – invalid color value")
+                if strict:
+                    raise
+                continue
         else:
-            required = {
-                int(s.value)
-                for s in rule.source
-                if s.type is SymbolType.COLOR
-            }
+            try:
+                required = {
+                    int(s.value)
+                    for s in rule.source
+                    if s.type is SymbolType.COLOR
+                }
+            except ValueError:
+                if logger:
+                    logger.warning(f"Rule '{rule}' skipped – invalid color value")
+                if strict:
+                    raise
+                continue
 
         missing = [c for c in required if c not in color_presence]
         if missing:
@@ -669,6 +714,8 @@ def simulate_rules(
     h0, w0 = grid.shape()
     if uncertainty_grid is None:
         uncertainty_grid = [[0 for _ in range(w0)] for _ in range(h0)]
+    else:
+        _resize_grid_like(uncertainty_grid, grid)
     write_log: dict[tuple[int, int], list[int]] = defaultdict(list)
     write_vals: dict[tuple[int, int], list[int]] = defaultdict(list)
 
@@ -772,6 +819,7 @@ def simulate_rules(
         if lineage_tracker:
             lineage_tracker.observe_rule(rule, grid, tentative)
         grid = tentative
+        _resize_grid_like(uncertainty_grid, grid)
 
     policy = conflict_policy or CONFLICT_POLICY
     conflict_count = 0
