@@ -176,19 +176,75 @@ def validate_color_dependencies(
 
     for rule in rules:
         if isinstance(rule, CompositeRule):
-            first_sources = rule.steps[0].source
-            try:
-                required = {
-                    int(s.value)
-                    for s in first_sources
-                    if s.type is SymbolType.COLOR
-                }
-            except ValueError:
+            step_grid = Grid([row[:] for row in working.data])
+            step_presence = {v for row in step_grid.data for v in row}
+            valid_chain = True
+            for idx, step in enumerate(rule.steps):
+                try:
+                    required = {
+                        int(s.value)
+                        for s in step.source
+                        if s.type is SymbolType.COLOR
+                    }
+                except ValueError:
+                    if logger:
+                        logger.warning(
+                            f"Rule '{rule}' skipped – invalid color value"
+                        )
+                    if strict:
+                        raise
+                    valid_chain = False
+                    break
+
+                missing = [c for c in required if c not in step_presence]
+                if missing:
+                    for c in missing:
+                        if lineage_tracker and c in lineage_tracker.removed_by:
+                            info = f"; removed by prior rule '{lineage_tracker.removed_by[c]}'"
+                            trace = lineage_tracker.get_lineage(c)
+                            if logger:
+                                logger.warning(
+                                    f"Rule '{rule}' skipped – source color {c} no longer present{info}. Lineage for {c}: {trace}"
+                                )
+                        else:
+                            info = (
+                                f"; removed by prior rule '{lineage[c]}'" if c in lineage else ""
+                            )
+                            if logger:
+                                logger.warning(
+                                    f"Rule '{rule}' skipped – source color {c} no longer present{info}"
+                                )
+                    if strict:
+                        raise ValueError(f"Missing colors for rule: {rule}")
+                    valid_chain = False
+                    break
+
+                before_step = {v for row in step_grid.data for v in row}
                 if logger:
-                    logger.warning(f"Rule '{rule}' skipped – invalid color value")
-                if strict:
-                    raise
+                    logger.debug(
+                        "validate step %d of %s: require %s, presence %s",
+                        idx,
+                        rule,
+                        required,
+                        step_presence,
+                    )
+                step_grid = safe_apply_rule(step, step_grid, perform_checks=False)
+                if logger:
+                    logger.debug(
+                        "after step %d of %s: grid %s",
+                        idx,
+                        rule,
+                        step_grid.data,
+                    )
+                step_presence = {v for row in step_grid.data for v in row}
+
+            if not valid_chain:
                 continue
+
+            grid_before_apply = Grid([row[:] for row in working.data])
+            before = {v for row in grid_before_apply.data for v in row}
+            working = step_grid
+            after = step_presence
         else:
             try:
                 required = {
@@ -203,33 +259,34 @@ def validate_color_dependencies(
                     raise
                 continue
 
-        missing = [c for c in required if c not in color_presence]
-        if missing:
-            for c in missing:
-                if lineage_tracker and c in lineage_tracker.removed_by:
-                    info = f"; removed by prior rule '{lineage_tracker.removed_by[c]}'"
-                    trace = lineage_tracker.get_lineage(c)
-                    if logger:
-                        logger.warning(
-                            f"Rule '{rule}' skipped – source color {c} no longer present{info}. Lineage for {c}: {trace}"
-                        )
-                else:
-                    info = f"; removed by prior rule '{lineage[c]}'" if c in lineage else ""
-                    if logger:
-                        logger.warning(
-                            f"Rule '{rule}' skipped – source color {c} no longer present{info}"
-                        )
-            if strict:
-                raise ValueError(f"Missing colors for rule: {rule}")
-            continue
+            missing = [c for c in required if c not in color_presence]
+            if missing:
+                for c in missing:
+                    if lineage_tracker and c in lineage_tracker.removed_by:
+                        info = f"; removed by prior rule '{lineage_tracker.removed_by[c]}'"
+                        trace = lineage_tracker.get_lineage(c)
+                        if logger:
+                            logger.warning(
+                                f"Rule '{rule}' skipped – source color {c} no longer present{info}. Lineage for {c}: {trace}"
+                            )
+                    else:
+                        info = f"; removed by prior rule '{lineage[c]}'" if c in lineage else ""
+                        if logger:
+                            logger.warning(
+                                f"Rule '{rule}' skipped – source color {c} no longer present{info}"
+                            )
+                if strict:
+                    raise ValueError(f"Missing colors for rule: {rule}")
+                continue
 
-        grid_before_apply = Grid([row[:] for row in working.data])
-        before = {v for row in grid_before_apply.data for v in row}
-        try:
-            working = safe_apply_rule(rule, working, perform_checks=False)
-        except Exception:
-            pass
-        after = {v for row in working.data for v in row}
+            grid_before_apply = Grid([row[:] for row in working.data])
+            before = {v for row in grid_before_apply.data for v in row}
+            try:
+                working = safe_apply_rule(rule, working, perform_checks=False)
+            except Exception:
+                pass
+            after = {v for row in working.data for v in row}
+
         removed = before - after
         for col in removed:
             lineage[col] = str(rule)
