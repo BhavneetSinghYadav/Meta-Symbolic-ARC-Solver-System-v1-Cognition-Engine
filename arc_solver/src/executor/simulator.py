@@ -126,20 +126,50 @@ def _resize_grid_like(base: list[list[int]], grid: Grid) -> None:
             base[r].extend([0] * (w - bw))
 
 
-def mark_conflict(loc: tuple[int, int], uncertainty_grid: list[list[int]] | None = None) -> None:
-    if uncertainty_grid is not None:
-        r, c = loc
+def mark_conflict(
+    loc: tuple[int, int],
+    uncertainty_grid: list[list[int]] | None = None,
+    grid: Grid | None = None,
+) -> None:
+    """Mark a conflict at ``loc`` in ``uncertainty_grid``.
+
+    If ``grid`` is provided and its shape exceeds ``uncertainty_grid`` in any
+    dimension, ``uncertainty_grid`` is resized accordingly. This prevents
+    ``IndexError`` when rules expand the working grid during simulation.
+    """
+
+    if uncertainty_grid is None:
+        return
+
+    r, c = loc
+
+    if grid is not None:
+        gh, gw = grid.shape()
         uh = len(uncertainty_grid)
-        uw = len(uncertainty_grid[0]) if uncertainty_grid else 0
+        uw = len(uncertainty_grid[0]) if uh > 0 else 0
+        if gh > uh or gw > uw:
+            old_shape = (uh, uw)
+            new_grid = [[0 for _ in range(gw)] for _ in range(gh)]
+            for rr in range(uh):
+                for cc in range(uw):
+                    new_grid[rr][cc] = uncertainty_grid[rr][cc]
+            uncertainty_grid[:] = new_grid
+            logger.debug(
+                "Resized uncertainty grid from %s to %s", old_shape, (gh, gw)
+            )
+
+    try:
+        uh = len(uncertainty_grid)
+        uw = len(uncertainty_grid[0]) if uh > 0 else 0
         if r >= uh:
             for _ in range(r - uh + 1):
                 uncertainty_grid.append([0] * uw)
         if c >= uw:
             for row in uncertainty_grid:
                 row.extend([0] * (c - uw + 1))
-        if r >= len(uncertainty_grid) or c >= len(uncertainty_grid[0]):
-            return
         uncertainty_grid[r][c] += 1
+    except IndexError:  # pragma: no cover - safety fallback
+        logger.warning("Failed to mark conflict at %s due to size mismatch", loc)
 
 
 def visualize_uncertainty(uncertainty_grid: list[list[int]], output_path: str = "uncertainty_map.png") -> None:
@@ -884,7 +914,7 @@ def simulate_rules(
         if len(writers) > 1:
             if logger:
                 logger.warning(f"Collision at {loc}: rules {writers}")
-            mark_conflict(loc, uncertainty_grid)
+            mark_conflict(loc, uncertainty_grid, grid)
             vals = write_vals[loc]
             if policy == "first":
                 grid.set(loc[0], loc[1], vals[0])
