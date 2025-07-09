@@ -144,14 +144,19 @@ def validate_color_dependencies(
     valid: list[SymbolicRule | CompositeRule] = []
 
     for rule in rules:
-        src_syms = rule.get_sources() if isinstance(rule, CompositeRule) else rule.source
-        required: set[int] = set()
-        for s in src_syms:
-            if s.type is SymbolType.COLOR:
-                try:
-                    required.add(int(s.value))
-                except Exception:
-                    continue
+        if isinstance(rule, CompositeRule):
+            first_sources = rule.steps[0].source
+            required = {
+                int(s.value)
+                for s in first_sources
+                if s.type is SymbolType.COLOR
+            }
+        else:
+            required = {
+                int(s.value)
+                for s in rule.source
+                if s.type is SymbolType.COLOR
+            }
 
         missing = [c for c in required if c not in color_presence]
         if missing:

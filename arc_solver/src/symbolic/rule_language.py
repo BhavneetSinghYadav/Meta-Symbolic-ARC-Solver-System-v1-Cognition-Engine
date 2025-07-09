@@ -177,12 +177,16 @@ class CompositeRule:
     def is_well_formed(self) -> bool:
         return all(getattr(step, "is_well_formed", lambda: False)() for step in self.steps)
 
+    def final_targets(self) -> List[Symbol]:
+        """Return target symbols from the final step."""
+        return self.steps[-1].target if self.steps else []
+
     def as_symbolic_proxy(self) -> SymbolicRule:
         """Create a SymbolicRule-like proxy for use in dependency utilities."""
         return SymbolicRule(
             transformation=self.transformation,
-            source=self.get_sources(),
-            target=self.get_targets(),
+            source=self.steps[0].source,
+            target=self.final_targets(),
             condition=self.get_condition() or {},
             nature=TransformationNature.SPATIAL,
         )
@@ -196,9 +200,7 @@ class CompositeRule:
 
 def final_targets(rule: CompositeRule) -> List[Symbol]:
     """Return target symbols from the final step of ``rule``."""
-    if not rule.steps:
-        return []
-    return list(getattr(rule.steps[-1], "target", []))
+    return rule.final_targets()
 
 
 __all__ = [
