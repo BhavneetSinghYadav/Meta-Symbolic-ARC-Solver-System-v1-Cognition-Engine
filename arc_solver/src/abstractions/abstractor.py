@@ -612,6 +612,12 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
             chain_pen = len(getattr(r, "steps", []))
             scored.append((r, s + bonus - 0.05 * chain_pen))
         scored.sort(key=lambda x: x[1], reverse=True)
+        if logger:
+            ranking = [
+                {"type": r.transformation.ttype.name, "score": float(s)}
+                for r, s in scored
+            ]
+            logger.debug("ranked_rules=%s", ranking)
         TOP_N = 25
         rules = [r for r, _ in scored[:TOP_N]]
     except Exception:

@@ -456,6 +456,14 @@ def simulate_rules(
     except Exception:
         rules = sort_rules_by_dependency(rules)
 
+    if logger:
+        total = len(rules)
+        comp = sum(1 for r in rules if isinstance(r, CompositeRule))
+        ratio = comp / total if total else 0.0
+        logger.debug(
+            "simulate_rules received %d rules, %d composite (%.2f)", total, comp, ratio
+        )
+
     grid = Grid([row[:] for row in input_grid.data])
     # Pre-compute rule coverage and sort rules by descending impact
     coverage_pairs: list[tuple[SymbolicRule, int]] = []
