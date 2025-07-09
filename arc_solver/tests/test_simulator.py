@@ -78,3 +78,29 @@ def test_composite_chain_validation_accept():
 
     validated = validate_color_dependencies([comp], grid)
     assert validated == [comp]
+
+
+def test_conflict_resize_after_repeat():
+    inp = Grid([[1]])
+    repeat = SymbolicRule(
+        transformation=Transformation(
+            TransformationType.REPEAT, params={"kx": "2", "ky": "1"}
+        ),
+        source=[Symbol(SymbolType.COLOR, "1")],
+        target=[Symbol(SymbolType.COLOR, "1")],
+    )
+    r1 = SymbolicRule(
+        transformation=Transformation(TransformationType.REPLACE),
+        source=[Symbol(SymbolType.COLOR, "1")],
+        target=[Symbol(SymbolType.COLOR, "2")],
+    )
+    r2 = SymbolicRule(
+        transformation=Transformation(TransformationType.REPLACE),
+        source=[Symbol(SymbolType.COLOR, "1")],
+        target=[Symbol(SymbolType.COLOR, "3")],
+    )
+    uncertainty = [[0]]
+    out = simulate_rules(inp, [repeat, r1, r2], uncertainty_grid=uncertainty)
+    assert out.shape() == (1, 2)
+    assert len(uncertainty) == 1 and len(uncertainty[0]) == 2
+    assert uncertainty[0][1] > 0
