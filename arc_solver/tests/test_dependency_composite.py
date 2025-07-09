@@ -35,3 +35,13 @@ def test_select_independent_rules_composite():
     comp = CompositeRule([r1])
     selected = select_independent_rules([comp, r2])
     assert selected == [r2, comp]
+
+
+def test_composite_dependency_ordering():
+    c1 = _color_rule(1, 2)
+    c2 = _color_rule(2, 3)
+    composite = CompositeRule([c1, c2])
+    r2 = _color_rule(2, 4)
+    rules = [composite, r2]
+    sorted_rules = select_independent_rules(rules)
+    assert sorted_rules.index(r2) < sorted_rules.index(composite)
