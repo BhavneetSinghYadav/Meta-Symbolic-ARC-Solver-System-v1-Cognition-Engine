@@ -122,6 +122,7 @@ def validate_color_dependencies(
     *,
     logger: logging.Logger | None = None,
     strict: bool = False,
+    lineage_tracker: ColorLineageTracker | None = None,
 ) -> List[SymbolicRule | CompositeRule]:
     """Return ``rules`` filtered by available colors.
 
@@ -149,16 +150,25 @@ def validate_color_dependencies(
         missing = [c for c in required if c not in color_presence]
         if missing:
             for c in missing:
-                info = f"; removed by prior rule '{lineage[c]}'" if c in lineage else ""
-                if logger:
-                    logger.warning(
-                        f"Rule '{rule}' skipped – source color {c} no longer present{info}"
-                    )
+                if lineage_tracker and c in lineage_tracker.removed_by:
+                    info = f"; removed by prior rule '{lineage_tracker.removed_by[c]}'"
+                    trace = lineage_tracker.get_lineage(c)
+                    if logger:
+                        logger.warning(
+                            f"Rule '{rule}' skipped – source color {c} no longer present{info}. Lineage for {c}: {trace}"
+                        )
+                else:
+                    info = f"; removed by prior rule '{lineage[c]}'" if c in lineage else ""
+                    if logger:
+                        logger.warning(
+                            f"Rule '{rule}' skipped – source color {c} no longer present{info}"
+                        )
             if strict:
                 raise ValueError(f"Missing colors for rule: {rule}")
             continue
 
-        before = {v for row in working.data for v in row}
+        grid_before_apply = Grid([row[:] for row in working.data])
+        before = {v for row in grid_before_apply.data for v in row}
         try:
             working = safe_apply_rule(rule, working, perform_checks=False)
         except Exception:
@@ -167,6 +177,10 @@ def validate_color_dependencies(
         removed = before - after
         for col in removed:
             lineage[col] = str(rule)
+            if lineage_tracker:
+                lineage_tracker.removed_by[col] = str(rule)
+        if lineage_tracker:
+            lineage_tracker.observe_rule(rule, grid_before_apply, working)
         color_presence = after
         valid.append(rule)
 
@@ -506,6 +520,7 @@ def simulate_rules(
     uncertainty_grid: list[list[int]] | None = None,
     conflict_policy: str | None = None,
     strict: bool = False,
+    lineage_tracker: ColorLineageTracker | None = None,
 ) -> Grid:
     """Apply a list of symbolic rules to ``input_grid`` with reflex checks."""
     # Determine execution order based on rule dependencies and spatial topology
@@ -513,6 +528,8 @@ def simulate_rules(
         rules = sort_rules_by_topology(rules)
     except Exception:
         rules = sort_rules_by_dependency(rules)
+
+    lineage_tracker = lineage_tracker or ColorLineageTracker(input_grid)
 
     if logger:
         total = len(rules)
@@ -523,7 +540,13 @@ def simulate_rules(
         )
 
     # Validate color dependencies before simulation
-    rules = validate_color_dependencies(rules, input_grid, logger=logger, strict=strict)
+    rules = validate_color_dependencies(
+        rules,
+        input_grid,
+        logger=logger,
+        strict=strict,
+        lineage_tracker=lineage_tracker,
+    )
 
     grid = Grid([row[:] for row in input_grid.data])
     # Pre-compute rule coverage and sort rules by descending impact
@@ -644,6 +667,8 @@ def simulate_rules(
             zone_miss = len(zone_cells) - len(changed)
             if zone_miss > 0:
                 logger.info(f"Zone mismatch count: {zone_miss}")
+        if lineage_tracker:
+            lineage_tracker.observe_rule(rule, grid, tentative)
         grid = tentative
 
     policy = conflict_policy or CONFLICT_POLICY
