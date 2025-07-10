@@ -11,6 +11,11 @@ from .compositional import (
     run_pipeline,
 )
 from .diff_penalty import SymbolicDiffPenaltyEngine
+from .zone_adjustments import (
+    zone_entropy_penalty,
+    zone_alignment_bonus,
+    zone_coverage_weight,
+)
 
 __all__ = [
     "RuleInfo",
@@ -22,4 +27,7 @@ __all__ = [
     "justify_selection",
     "run_pipeline",
     "SymbolicDiffPenaltyEngine",
+    "zone_entropy_penalty",
+    "zone_alignment_bonus",
+    "zone_coverage_weight",
 ]
