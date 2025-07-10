@@ -27,6 +27,10 @@ from arc_solver.src.symbolic.vocabulary import (
 from arc_solver.src.symbolic.repeat_rule import generate_repeat_rules
 from arc_solver.src.configs.defaults import ENABLE_COMPOSITE_REPEAT
 
+# Optional toggles controlling abstraction behaviour
+ENABLE_FALLBACK_COMPOSITES = True
+RELIABILITY_THRESHOLD = 0.4
+
 
 
 
@@ -570,7 +574,13 @@ def retest_rules_on_pairs(
 # Convenience wrapper
 # ---------------------------------------------------------------------------
 
-def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Grid]]] = None) -> List[SymbolicRule]:
+def abstract(
+    objects,
+    *,
+    logger=None,
+    other_pairs: Optional[List[Tuple[Grid, Grid]]] = None,
+    trace: bool = False,
+) -> List[SymbolicRule]:
     """Return symbolic abstractions of a grid pair.
 
     When ``logger`` is provided, messages describing which extraction heuristics
@@ -580,6 +590,7 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
         return []
 
     input_grid, output_grid = objects[0], objects[1]
+    trace_entry: Dict[str, int] | None = {} if trace else None
     layout = extract_layout_rules(input_grid, output_grid)
     overlay, zone_info = segment_and_overlay(input_grid, output_grid)
     if overlay is not None:
@@ -673,9 +684,38 @@ def abstract(objects, *, logger=None, other_pairs: Optional[List[Tuple[Grid, Gri
         if hasattr(rule, "is_well_formed") and not rule.is_well_formed():
             continue
         filtered.append(rule)
+
+    valid_rules = filtered
+    fallback_rules: List[SymbolicRule] = []
+    if ENABLE_FALLBACK_COMPOSITES and len(valid_rules) == 0:
+        from arc_solver.src.symbolic.composite_rules import (
+            generate_repeat_composite_rules,
+        )
+        fallback_rules = generate_repeat_composite_rules(input_grid, output_grid)
+        fallback_rules = [
+            r
+            for r in fallback_rules
+            if score_rule(input_grid, output_grid, r) > 0.5
+        ]
+        valid_rules.extend(fallback_rules)
+    if trace_entry is not None:
+        trace_entry["fallback_rules_used"] = len(fallback_rules)
+
+    if RELIABILITY_THRESHOLD:
+        before = len(valid_rules)
+        valid_rules = [
+            r
+            for r in valid_rules
+            if getattr(r, "reliability", r.meta.get("rule_reliability", 1.0))
+            >= RELIABILITY_THRESHOLD
+        ]
+        if trace_entry is not None:
+            trace_entry["filtered_by_reliability"] = before - len(valid_rules)
+
     if other_pairs:
-        retest_rules_on_pairs(filtered, other_pairs)
-    return layout + filtered
+        retest_rules_on_pairs(valid_rules, other_pairs)
+
+    return layout + valid_rules
 
 
 __all__ = [
