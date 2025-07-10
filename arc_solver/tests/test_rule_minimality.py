@@ -1,4 +1,5 @@
 from arc_solver.src.abstractions.rule_generator import rule_cost
+from arc_solver.src.executor.scoring import _op_cost
 from arc_solver.src.symbolic.vocabulary import (
     SymbolicRule,
     Symbol,
@@ -6,6 +7,7 @@ from arc_solver.src.symbolic.vocabulary import (
     Transformation,
     TransformationType,
 )
+from arc_solver.src.utils import config_loader
 
 
 def test_rule_minimality():
@@ -21,3 +23,16 @@ def test_rule_minimality():
         condition={"zone": "A"},
     )
     assert rule_cost(simple) < rule_cost(complex_rule)
+
+
+def test_rule_cost_functional_sparse():
+    rule = SymbolicRule(
+        Transformation(TransformationType.FUNCTIONAL, params={"op": "dilate_zone"}),
+        source=[Symbol(SymbolType.REGION, "All")],
+        target=[Symbol(SymbolType.REGION, "All")],
+    )
+    config_loader.set_sparse_mode(True)
+    try:
+        assert rule_cost(rule) == _op_cost(rule)
+    finally:
+        config_loader.set_sparse_mode(False)

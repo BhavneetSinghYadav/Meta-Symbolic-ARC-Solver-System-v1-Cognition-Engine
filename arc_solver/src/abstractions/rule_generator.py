@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 from arc_solver.src.symbolic.rule_language import rule_to_dsl
 from arc_solver.src.utils import config_loader
 
@@ -80,8 +80,26 @@ def remove_duplicate_rules(
     """Return rule list with semantic duplicates removed."""
     seen_hashes = set()
     deduped: List[SymbolicRule | CompositeRule] = []
+
+    def _meta_value(v: Any) -> str:
+        if hasattr(v, "data"):
+            return str(getattr(v, "data", v))
+        return str(v)
+
+    def _meta_signature(r: SymbolicRule | CompositeRule) -> str:
+        """Return string representation of meta information for hashing."""
+        def _sig(meta: Dict[str, Any]) -> str:
+            return ";".join(f"{k}={_meta_value(v)}" for k, v in sorted(meta.items()))
+
+        if isinstance(r, CompositeRule):
+            parts = [_sig(getattr(r, "meta", {}))]
+            parts.extend(_sig(getattr(step, "meta", {})) for step in r.steps)
+            return "|".join(parts)
+        return _sig(getattr(r, "meta", {}))
+
     for rule in rules:
-        h = hash(normalize_rule_dsl(rule_to_dsl(rule)))
+        sig = normalize_rule_dsl(rule_to_dsl(rule)) + _meta_signature(rule)
+        h = hash(sig)
         if h not in seen_hashes:
             deduped.append(rule)
             seen_hashes.add(h)
@@ -92,6 +110,13 @@ def rule_cost(rule: SymbolicRule | CompositeRule) -> float:
     """Return heuristic cost of ``rule`` for sparsity ranking."""
     if isinstance(rule, CompositeRule):
         return sum(rule_cost(step) for step in rule.steps)
+    if (
+        config_loader.SPARSE_MODE
+        and rule.transformation.ttype is TransformationType.FUNCTIONAL
+    ):
+        from arc_solver.src.executor.scoring import _op_cost
+
+        return float(_op_cost(rule))
     zone_str = rule.condition.get("zone", "") if rule.condition else ""
     zone_size = len(zone_str) if isinstance(zone_str, str) else len(str(zone_str))
     transform_complexity = len(rule_to_dsl(rule).split("->")[1])
