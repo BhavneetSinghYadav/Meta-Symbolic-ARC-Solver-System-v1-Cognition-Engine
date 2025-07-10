@@ -1,72 +1,77 @@
 # Meta-Symbolic ARC Solver System
 
+## 1. Project Overview
 
+This repository contains a symbolic solver for the [Abstraction and Reasoning Corpus (ARC)](https://github.com/fchollet/ARC).  The solver infers a set of symbolic rules from provided training examples and applies them to unseen test grids.  The design emphasises interpretability: rules are represented as structured `SymbolicRule` objects and can be chained into `CompositeRule` programs.  Recent updates added composite rule scoring, failure logging and a safer conflict tracking mechanism.
 
-Scripts located in `arc_solver/scripts` serve as entrypoints for running the solver, training search models and visualizing traces. Configuration files are stored in `arc_solver/configs` while experiment results and notebooks live in their respective directories.
-
-Basic unit tests are included under `arc_solver/tests` and can be run with `pytest`.
-
-For a high level view of how the solver components interact, see
-[docs/architecture.md](docs/architecture.md).
-
-## Repository Structure
+## 2. System Architecture
 
 ```
-arc_solver/
-  src/            # Library code
-  scripts/        # Command line entry points
-  tests/          # Unit tests
-  experiments/    # Sample experiment output
-  notebooks/      # Jupyter notebooks
+Input Grid → Abstraction → Rule Ranking → Simulation → Feedback/Memory
 ```
 
-### Key Modules
+* **Grid** – core data structure in [`core/grid.py`](arc_solver/src/core/grid.py)
+* **Abstraction** – extracts candidate rules in [`abstractions/abstractor.py`](arc_solver/src/abstractions/abstractor.py)
+* **Rule ranking** – heuristics and dependency checks in [`search`](arc_solver/src/search)
+* **Simulation** – applies rules with conflict resolution in [`executor`](arc_solver/src/executor)
+* **Feedback & memory** – optional refinement and program storage in [`feedback`](arc_solver/src/feedback) and [`memory`](arc_solver/src/memory)
 
-| Module | Purpose |
-| ------ | ------- |
-| `core/grid.py` | Defines the :class:`Grid` data structure representing a 2‑D array and utility methods such as rotation, flipping, color counting, and comparison. |
-| `symbolic/vocabulary.py` | Contains the symbolic vocabulary (`Symbol`, `SymbolicRule`, `Transformation`, etc.) used across the solver. |
-| `abstractions/abstractor.py` | Extracts symbolic rules from input/output grid pairs (e.g. color replacements or translations). |
-| `abstractions/rule_generator.py` | Provides helper functions like `generalize_rules` and `score_rules` for deduplicating and scoring extracted rules. |
-| `abstractions/transformation_library.py` | Minimal library of transform classes such as `ReplaceColor`. |
-| `segment/segmenter.py` | Implements zone‐based and connected‑component segmentation utilities. |
-| `executor/simulator.py` | Applies symbolic rules to a grid and computes similarity scores. |
-| `executor/conflict_resolver.py` | Removes contradictory rules using simple heuristics. |
-| `executor/predictor.py` | Chooses the best rule set by simulating and scoring candidates. |
-| `search/rule_ranker.py` | Ranks sets of rules using heuristics and an optional `PolicyCache`. |
-| `memory/policy_cache.py` | Tracks failing rule programs to avoid repeated mistakes. |
-| `feedback/correction.py` | Generates textual feedback comparing predicted and target grids. |
-| `data/arc_dataset.py` | Loads ARC tasks and exposes an iterable dataset. |
-| `utils/config_loader.py` | Reads JSON or YAML configuration files. |
+A more detailed walkthrough is available in [docs/architecture.md](docs/architecture.md).
 
-Most other modules currently contain placeholders for future expansion (e.g. `feature_mapper.py`, `fallback_predictor.py`).
+## 3. Setup Instructions
 
-### Symbolic DSL
+1. Python 3.9 or later is recommended.
+2. Install the package in editable mode and fetch dependencies:
+   ```bash
+   pip install -e .
+   pip install -r requirements.txt
+   ```
+3. Run the unit tests to verify the environment:
+   ```bash
+   pytest -q
+   ```
 
-Simple programs can also be expressed using a lightweight DSL.  The helper
-function ``parse_program_expression`` converts expressions like ``"if color == 3
-and in region(Center): replace with 2"`` into :class:`SymbolicRule` objects.
-Programs are simulated using ``simulate_symbolic_program`` from
-``executor.simulator``.
+## 4. How to Run
 
-### Dependencies
+The main entrypoint for solving tasks is `arc_solver/scripts/run_solver.py`:
+```bash
+python arc_solver/scripts/run_solver.py <path_to_arc_tasks>
+```
+For single-task experimentation or scoring analysis use [`instrument.py`](instrument.py):
+```bash
+python instrument.py --bundle arc-agi_training_challenges.json --task_id 00000001
+```
+`full_pipeline.py` under `executor` exposes `solve_task` and `solve_task_iterative` functions used by the scripts.
 
-The packages depend on each other as follows:
+## 5. Code Modules Breakdown
 
-* **Abstractions** import :class:`Grid` from `core` and structures from `symbolic`.
-* **Executor** modules use `core.grid` and `symbolic` to simulate and evaluate rule programs.
-* **Search** utilities rely on `memory.policy_cache` and symbolic rules to rank candidate programs.
-* **Predictor** orchestrates `executor` components to pick the best rule set for a task.
-* **Feedback** and **introspection** modules analyse solver outputs, while **segment** supplies zone annotations for abstraction.
+| Path | Role |
+| ---- | ---- |
+| [`src/core`](arc_solver/src/core) | Grid utilities and helpers |
+| [`src/abstractions`](arc_solver/src/abstractions) | Rule extraction and generalisation |
+| [`src/symbolic`](arc_solver/src/symbolic) | DSL parser and rule definitions |
+| [`src/executor`](arc_solver/src/executor) | Rule simulation, ranking and pipeline orchestration |
+| [`src/scoring`](arc_solver/src/scoring) | Heuristics for rule and program scoring |
+| [`src/memory`](arc_solver/src/memory) | Optional rule program cache |
+| [`scripts`](arc_solver/scripts) | CLI utilities for evaluation and experimentation |
 
-For a complete overview of the processing pipeline, see the [architecture document](docs/architecture.md).
+## 6. Output & Logging
 
-## Kaggle Usage
+Predicted grids for datasets are written to `submission.json`.  When `solve_task` runs with `debug=True` a detailed log file is created under `logs/` describing extracted rules, conflicts and scoring statistics.  Failures below a score threshold are appended to `logs/failure_log.json` for later inspection.
 
-When running inside Kaggle notebooks the workspace is read-only. To persist the
-rule memory between sessions, place `rule_memory.json` in a dataset named
-`arc-memory` and mount it under `/kaggle/input/arc-memory/`. Calling
-`preload_memory_from_kaggle_input()` will copy the file into the working
-directory so the solver can update it.
+## 7. Example Tasks & Visualizations
 
+Sample notebooks in [`arc_solver/notebooks`](arc_solver/notebooks) demonstrate zone overlays and trace debugging.  The `docs/` folder contains architecture diagrams.  Generated visualisations and experiment outputs are stored under `arc_solver/experiments`.
+
+## 8. Known Issues / Future Work
+
+* Composite rules are still penalised by rule cost.  The scoring module mitigates this by dividing the penalty by the square root of the chain length when `prefer_composites` is enabled【F:arc_solver/src/executor/scoring.py†L6-L10】【F:arc_solver/src/executor/scoring.py†L88-L103】.
+* Conflict marking resizes the uncertainty grid to avoid `IndexError` when rules expand the working grid【F:arc_solver/src/executor/simulator.py†L128-L170】.
+* Some advanced scoring functions are placeholders (`TODO` in comments) and require tuning.
+
+## 9. Developer Notes
+
+* Run `pytest` before submitting changes.  All current tests should pass (142 tests)【69a983†L1-L4】.
+* Keep new modules under the existing `arc_solver/src` hierarchy.
+* Contributions that extend the rule vocabulary or improve the ranking heuristics are welcome; please document new behaviour in this README.
 
