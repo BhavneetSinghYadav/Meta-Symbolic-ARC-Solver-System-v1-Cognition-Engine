@@ -57,7 +57,7 @@ python instrument.py --bundle arc-agi_training_challenges.json --task_id 0000000
 
 ## 6. Output & Logging
 
-Predicted grids for datasets are written to `submission.json`.  When `solve_task` runs with `debug=True` a detailed log file is created under `logs/` describing extracted rules, conflicts and scoring statistics.  Failures below a score threshold are appended to `logs/failure_log.json` for later inspection.
+Predicted grids for datasets are written to `submission.json`.  When `solve_task` runs with `debug=True` a detailed log file is created under `logs/` describing extracted rules, conflicts and scoring statistics.  Failures below a score threshold are appended to `logs/failure_log.jsonl` as JSON lines containing `intermediate_grids`, `color_lineage`, `rejection_stage` and other diagnostics.
 
 ## 7. Example Tasks & Visualizations
 
@@ -65,7 +65,6 @@ Sample notebooks in [`arc_solver/notebooks`](arc_solver/notebooks) demonstrate z
 
 ## 8. Known Issues / Future Work
 
-* Composite rules are still penalised by rule cost.  The scoring module mitigates this by dividing the penalty by the square root of the chain length when `prefer_composites` is enabled【F:arc_solver/src/executor/scoring.py†L6-L10】【F:arc_solver/src/executor/scoring.py†L88-L103】.
 * Conflict marking resizes the uncertainty grid to avoid `IndexError` when rules expand the working grid【F:arc_solver/src/executor/simulator.py†L128-L170】.
 * Some advanced scoring functions are placeholders (`TODO` in comments) and require tuning.
 

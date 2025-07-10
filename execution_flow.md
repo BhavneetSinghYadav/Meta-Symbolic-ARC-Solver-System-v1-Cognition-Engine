@@ -34,15 +34,15 @@ solve_task() → abstraction → scoring → validation → simulation → predi
 - `simulate_rules()` from [`executor/simulator.py`](arc_solver/src/executor/simulator.py) applies each rule sequentially.
 - Conflict resolution relies on `mark_conflict()` with the policy defined by `CONFLICT_POLICY`.
 - Composite programs are expanded via `simulate_composite_rule()`.
-- Fallbacks to `fallback_predict` are triggered when simulation fails or no candidate rules remain.
+- Fallbacks to `fallback_predict` are triggered only after all symbolic candidates – including those rejected by validation – have been simulated.  If any rule scores sufficiently high the fallback is bypassed.
 
 ## 7. Output Formatting
 - Predictions for each test grid are returned by `solve_task` and written to `submission.json` by higher level scripts.
 
 ### Example Flow for Task `00576224`
 1. `solve_task` loads the training grid and extracts rules.
-2. `validate_color_dependencies` rejects them because the required colours disappear after earlier steps.
-3. The solver invokes the fallback predictor, producing an all-zero grid, which is recorded in `submission.json`:
+2. `validate_color_dependencies` simulates each composite and checks colour sufficiency only at the final step. All candidates still fail to score above the threshold.
+3. The solver then invokes the fallback predictor, producing an all-zero grid, which is recorded in `submission.json`:
    ```json
    {"00576224": [{"attempt_1": [[0,0,...]] ... }]
    ```
@@ -61,4 +61,9 @@ flowchart TD
     E --> G[Predictions]
 ```
 Exceptions during abstraction or simulation, low visual score, or invalid rules all route to the fallback predictor.
+
+When a rule is rejected or fails during simulation, a JSON entry is appended to `logs/failure_log.jsonl` capturing the `rule_id`, `rejection_stage`, `failed_step_index`, the `intermediate_grids` snapshot and the present `color_lineage`.
+```json
+{"task_id": "00576224", "rule_id": "REPEAT -> REPLACE", "rejection_stage": "validation", "failed_step_index": 0, "reason": "missing_color", "color_lineage": [[1,2]], "intermediate_grids": [[[1,2],[2,1]]]}
+```
 

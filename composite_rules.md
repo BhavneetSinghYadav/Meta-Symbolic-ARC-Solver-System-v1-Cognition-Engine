@@ -10,11 +10,9 @@ Composite rules represent a chain of symbolic transformations executed as a sing
 4. **Scoring** – `score_rule()` runs the composite, compares its output to the target and subtracts a cost penalty derived from `rule_cost()`. When `prefer_composites` is enabled the penalty is divided by the square root of the chain length. 【F:arc_solver/src/executor/scoring.py†L1-L110】【F:arc_solver/src/abstractions/rule_generator.py†L91-L98】
 
 ## Known Issues
-* **Scoring bias** – Large composites accumulate high cost via `rule_cost` which suppresses their scores even when they perfectly match. The penalty reduction in `score_rule()` only partially compensates.
-* **Intermediate colour loss** – `validate_color_dependencies()` may drop a composite if a step introduces colours that are later replaced, causing false negatives. 【F:arc_solver/src/executor/simulator.py†L186-L330】
 * **Proxy translation bug** – earlier versions used `get_targets()` when constructing the proxy for dependency checks. This merged all step targets and broke `final_targets()` which expects only the last step. The fix introduced `final_targets()` and updated `as_symbolic_proxy()` to use it. 【F:arc_solver/src/symbolic/rule_language.py†L180-L203】
 * **Dependency misordering** – Because the proxy originally reported merged targets, dependency sorting placed composites after rules that should depend on them. The helper now returns the final step's targets to ensure correct order. 【F:arc_solver/src/executor/dependency.py†L30-L40】
-* **Execution skips** – Colour validation occasionally rejects valid chains when lineage tracking reports that a source colour was removed by a prior step. This happens when intermediate recolouring temporarily removes colours needed later.
+* **Execution skips** – Colour validation may still reject chains if a step removes colours that never reappear, though intermediate loss is tolerated.
 
 ## Patch Log
 * **Composite rule chaining support** – initial integration enabling multi‑step programs. 【1cdbb2†L28-L30】
@@ -23,9 +21,11 @@ Composite rules represent a chain of symbolic transformations executed as a sing
 * **Safe composite simulation** – introduced `simulate_composite_safe()` to skip invalid steps rather than aborting, improving robustness. 【775ed7†L1-L29】
 * **Colour dependency refactor** – rewrote validation to check colours after each step and log lineage on failure. 【bec30d†L1-L55】
 * **Scoring adjustment** – reduced penalty multiplier and scaled by square root of step count when composites are preferred. 【90274b†L1-L25】
+* **Zone-aware proxy** – `as_symbolic_proxy()` now merges `input_zones` and `output_zones`, fixing dependency misordering for multi-zone composites.【F:arc_solver/src/executor/proxy_ext.py†L40-L57】
+* **Color validation update** – composite chains are validated as a whole with colour sufficiency checked only after the final step.【F:arc_solver/src/executor/simulator.py†L212-L340】
+* **Scoring overhaul** – penalties depend only on unique operation types and perfect composites receive a +0.2 bonus.【F:arc_solver/src/executor/scoring.py†L60-L109】
 
 ## Remaining Failure Modes
-* Composites with more than two steps often score below simpler single rules due to cumulative cost despite perfect matches.
 * Recolouring steps that introduce temporary colours can still cause validation rejection even after the lineage patch.
 * Proxy translation for advanced transformations (e.g. rotate within a composite) may misreport zones, leading to ordering mistakes.
 * Grid expansion by repeat steps occasionally exceeds the solver's safety limits, causing execution to abort.

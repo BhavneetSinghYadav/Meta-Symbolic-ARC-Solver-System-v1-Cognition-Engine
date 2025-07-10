@@ -153,5 +153,5 @@ result = safe_apply_rule(comp, grid)
 
 ## Limitations and Future Work
 
-The rule language currently focuses on colour and region manipulations. Shape abstraction and robust rotation handling are planned but not yet implemented. Composite rules may fail when intermediate colours disappear, and large repeat/translate steps can expand grids beyond the uncertainty map.
+The rule language currently focuses on colour and region manipulations. Shape abstraction and robust rotation handling are planned but not yet implemented. Large repeat/translate steps can expand grids beyond the uncertainty map.
 
