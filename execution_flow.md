@@ -62,7 +62,7 @@ flowchart TD
 ```
 Exceptions during abstraction or simulation, low visual score, or invalid rules all route to the fallback predictor.
 
-When a rule is rejected or fails during simulation, a JSON entry is appended to `logs/failure_log.jsonl` capturing the `rule_id`, `rejection_stage`, `failed_step_index`, the `intermediate_grids` snapshot and the present `color_lineage`.
+When a rule is rejected or fails during simulation, a JSON entry is appended to `logs/failure_log.jsonl` capturing the `rule_id`, `rejection_stage`, `failed_step_index`, the `intermediate_grids` snapshot and the present `color_lineage`.  If scoring debug output is enabled the record also includes a `score_trace` object detailing similarity, penalties and the operations used.
 ```json
 {"task_id": "00576224", "rule_id": "REPEAT -> REPLACE", "rejection_stage": "validation", "failed_step_index": 0, "reason": "missing_color", "color_lineage": [[1,2]], "intermediate_grids": [[[1,2],[2,1]]]}
 ```
