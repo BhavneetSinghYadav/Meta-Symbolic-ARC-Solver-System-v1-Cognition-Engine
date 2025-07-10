@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Extended proxy utilities for composite rules."""
 
-from typing import Any
+from typing import Any, List, Tuple
 
 from arc_solver.src.symbolic.rule_language import CompositeRule
 from arc_solver.src.symbolic.vocabulary import SymbolicRule, Symbol
@@ -39,7 +39,13 @@ def merge_zones(steps) -> list[str]:
 
 
 def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
-    """Return a proxy rule describing ``rule`` for dependency sorting."""
+    """Return a proxy rule describing ``rule`` for dependency sorting.
+
+    The proxy exposes aggregated zone metadata alongside a ``zone_chain``
+    describing the input/output zone transition of each step.  ``zone_chain``
+    is used by :func:`sort_rules_by_topology` to build a dependency graph that
+    respects how composites move data across zones over time.
+    """
 
     cond: dict[str, Any] = rule.get_condition() or {}
     merged_zones = merge_zones(rule.steps)
@@ -55,9 +61,34 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
         nature=rule.nature,
     )
 
+    zone_chain: List[Tuple[str | None, str | None]] = []
+    for step in rule.steps:
+        meta = getattr(step, "meta", {})
+        in_val = meta.get("input_zones")
+        out_val = meta.get("output_zones")
+
+        def _first(val):
+            if not val:
+                return None
+            if isinstance(val, str):
+                return val
+            return val[0] if len(val) == 1 else None
+
+        in_zone = _first(in_val)
+        out_zone = _first(out_val)
+
+        if in_zone is None or out_zone is None:
+            zone = (getattr(step, "condition", None) or {}).get("zone")
+            if isinstance(zone, str):
+                in_zone = in_zone or zone
+                out_zone = out_zone or zone
+
+        zone_chain.append((in_zone, out_zone))
+
     proxy.meta["input_zones"] = merged_zones
     proxy.meta["output_zones"] = merged_zones
     proxy.meta["step_count"] = len(rule.steps)
+    proxy.meta["zone_chain"] = zone_chain
     return proxy
 
 

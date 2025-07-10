@@ -22,6 +22,7 @@ Composite rules represent a chain of symbolic transformations executed as a sing
 * **Colour dependency refactor** – rewrote validation to check colours after each step and log lineage on failure. 【bec30d†L1-L55】
 * **Scoring adjustment** – reduced penalty multiplier and scaled by square root of step count when composites are preferred. 【90274b†L1-L25】
 * **Zone-aware proxy** – `as_symbolic_proxy()` now merges `input_zones` and `output_zones`, fixing dependency misordering for multi-zone composites.【F:arc_solver/src/executor/proxy_ext.py†L40-L57】
+* **Zone chain proxy** – `as_symbolic_proxy()` records `zone_chain` pairs so `sort_rules_by_topology()` can order composites based on zone transitions.【F:arc_solver/src/executor/proxy_ext.py†L41-L91】【F:arc_solver/src/executor/dependency.py†L69-L111】
 * **Color validation update** – composite chains are validated as a whole with colour sufficiency checked only after the final step.【F:arc_solver/src/executor/simulator.py†L212-L340】
 * **Scoring overhaul** – penalties depend only on unique operation types and perfect composites receive a +0.2 bonus.【F:arc_solver/src/executor/scoring.py†L60-L109】
 
