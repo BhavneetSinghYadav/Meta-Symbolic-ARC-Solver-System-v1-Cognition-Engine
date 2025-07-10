@@ -104,4 +104,111 @@ def validate_color_dependencies(
     return True
 
 
-__all__ = ["validate_color_dependencies", "simulate_step", "get_color_set"]
+def _step_explicitly_adds(step: SymbolicRule | CompositeRule, color: int) -> bool:
+    """Return True if ``step`` introduces ``color`` via its target."""
+    if isinstance(step, CompositeRule):
+        return any(_step_explicitly_adds(st, color) for st in step.steps)
+    try:
+        for sym in step.target:
+            if sym.type is SymbolType.COLOR and int(sym.value) == color:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def validate_color_lineage(
+    rule_chain: List[SymbolicRule | CompositeRule] | SymbolicRule | CompositeRule,
+    input_grid: Grid,
+    *,
+    rule_id: str | None = None,
+    task_id: str | None = None,
+) -> bool:
+    """Validate colour removals and reintroductions across ``rule_chain``."""
+
+    if isinstance(rule_chain, (SymbolicRule, CompositeRule)):
+        steps: List[SymbolicRule | CompositeRule] = (
+            rule_chain.steps if isinstance(rule_chain, CompositeRule) else [rule_chain]
+        )
+    else:
+        steps = list(rule_chain)
+
+    working = Grid([row[:] for row in input_grid.data])
+    color_lineage: List[Set[int]] = [get_color_set(working)]
+    intermediate_grids: List[List[List[int]]] = [[row[:] for row in working.data]]
+
+    removed_at: dict[int, int] = {}
+    restored_at: dict[int, int] = {}
+
+    step_index = 0
+    for step in steps:
+        before_set = get_color_set(working)
+        before_grid = [row[:] for row in working.data]
+        working = simulate_step(step, working)
+        after_set = get_color_set(working)
+        after_grid = [row[:] for row in working.data]
+
+        removed = before_set - after_set
+        added = after_set - before_set
+
+        for col in removed:
+            removed_at.setdefault(col, step_index)
+            log_failure(
+                task_id=task_id,
+                rule_id=rule_id or "chain",
+                rule_type="composite",
+                rule_steps=[str(s) for s in steps],
+                rejection_stage="validation",
+                failed_step_index=step_index,
+                reason="color_lineage_event",
+                color_lineage=[before_set, after_set],
+                intermediate_grids=[before_grid, after_grid],
+            )
+
+        for col in added:
+            if col in removed_at and _step_explicitly_adds(step, col):
+                restored_at[col] = step_index
+                removed_at.pop(col, None)
+            if col in removed_at or col in restored_at:
+                log_failure(
+                    task_id=task_id,
+                    rule_id=rule_id or "chain",
+                    rule_type="composite",
+                    rule_steps=[str(s) for s in steps],
+                    rejection_stage="validation",
+                    failed_step_index=step_index,
+                    reason="color_lineage_event",
+                    color_lineage=[before_set, after_set],
+                    intermediate_grids=[before_grid, after_grid],
+                )
+
+        color_lineage.append(after_set)
+        intermediate_grids.append(after_grid)
+        step_index += 1
+
+    final_colors = color_lineage[-1]
+    unresolved = {c: i for c, i in removed_at.items() if c in final_colors}
+    if unresolved:
+        first = min(unresolved.values())
+        log_failure(
+            task_id=task_id,
+            rule_id=rule_id or "chain",
+            rule_type="composite",
+            rule_steps=[str(s) for s in steps],
+            rejection_stage="validation",
+            failed_step_index=first,
+            reason="unrestored_color",
+            color_lineage=color_lineage,
+            intermediate_grids=intermediate_grids,
+        )
+        return False
+
+    return True
+
+
+__all__ = [
+    "validate_color_dependencies",
+    "simulate_step",
+    "get_color_set",
+    "validate_color_lineage",
+]
