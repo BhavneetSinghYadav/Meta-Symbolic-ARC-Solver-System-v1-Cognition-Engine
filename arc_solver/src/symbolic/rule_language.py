@@ -183,13 +183,9 @@ class CompositeRule:
 
     def as_symbolic_proxy(self) -> SymbolicRule:
         """Create a SymbolicRule-like proxy for use in dependency utilities."""
-        return SymbolicRule(
-            transformation=self.transformation,
-            source=self.steps[0].source,
-            target=self.final_targets(),
-            condition=self.get_condition() or {},
-            nature=TransformationNature.SPATIAL,
-        )
+        from arc_solver.src.executor.proxy_ext import as_symbolic_proxy as _proxy
+
+        return _proxy(self)
 
     def to_string(self) -> str:
         return " -> ".join(str(s) for s in self.steps)
