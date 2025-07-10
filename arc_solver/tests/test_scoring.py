@@ -37,3 +37,28 @@ def test_grow_rules_prioritization():
     out = Grid([[1, 1], [1, 1]])
     prefs = preferred_rule_types(inp, out)
     assert "REPEAT" in prefs or "REPEAT→REPLACE" in prefs
+
+
+def test_score_trace_logging(monkeypatch):
+    inp = Grid([[1]])
+    out = Grid([[9, 9], [9, 9]])
+    rule = SymbolicRule(
+        transformation=Transformation(TransformationType.REPLACE),
+        source=[Symbol(SymbolType.COLOR, "1")],
+        target=[Symbol(SymbolType.COLOR, "2")],
+    )
+
+    captured = {}
+
+    def fake_log_failure(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "arc_solver.src.executor.scoring.log_failure", fake_log_failure
+    )
+
+    trace = score_rule(inp, out, rule, return_trace=True)
+
+    assert trace["final_score"] < 0.2
+    assert captured.get("score_trace") == trace
+

@@ -57,7 +57,7 @@ python instrument.py --bundle arc-agi_training_challenges.json --task_id 0000000
 
 ## 6. Output & Logging
 
-Predicted grids for datasets are written to `submission.json`.  When `solve_task` runs with `debug=True` a detailed log file is created under `logs/` describing extracted rules, conflicts and scoring statistics.  Failures below a score threshold are appended to `logs/failure_log.jsonl` as JSON lines containing `intermediate_grids`, `color_lineage`, `rejection_stage` and other diagnostics.
+Predicted grids for datasets are written to `submission.json`.  When `solve_task` runs with `debug=True` a detailed log file is created under `logs/` describing extracted rules, conflicts and scoring statistics.  Failures below a score threshold are appended to `logs/failure_log.jsonl` as JSON lines containing `intermediate_grids`, `color_lineage`, `rejection_stage` and, when score tracing is enabled, a `score_trace` breakdown.
 
 ## 7. Example Tasks & Visualizations
 

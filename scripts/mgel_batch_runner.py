@@ -6,6 +6,7 @@ from typing import List, Dict, Any
 from arc_solver.src.data.arc_dataset import ARCDataset, load_arc_task
 from arc_solver.src.abstractions.abstractor import abstract
 from arc_solver.src.executor.simulator import simulate_rules
+from arc_solver.src.executor.scoring import score_rule
 from arc_solver.src.symbolic.rule_language import rule_to_dsl
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.evaluation.perceptual_score import perceptual_similarity_score
@@ -29,7 +30,12 @@ def diff_grid(pred: Grid, target: Grid) -> List[List[str]]:
     ]
 
 
-def process_task(task_path: Path, trace: bool = False, perceptual: bool = False) -> Dict[str, Any]:
+def process_task(
+    task_path: Path,
+    trace: bool = False,
+    perceptual: bool = False,
+    score_trace: bool = False,
+) -> Dict[str, Any]:
     """Run MGEL on ``task_path`` and return the best rule result."""
     task_id, inp, tgt = load_first_pair(task_path)
     programs = abstract([inp, tgt])
@@ -41,11 +47,16 @@ def process_task(task_path: Path, trace: bool = False, perceptual: bool = False)
             pred = simulate_rules(inp, [rule])
         except Exception:
             continue
-        score = (
-            perceptual_similarity_score(pred, tgt)
-            if perceptual
-            else pred.compare_to(tgt)
-        )
+        trace_info: Dict[str, Any] = {}
+        if score_trace:
+            trace_info = score_rule(inp, tgt, rule, return_trace=True)
+            score = trace_info.get("final_score", 0.0)
+        else:
+            score = (
+                perceptual_similarity_score(pred, tgt)
+                if perceptual
+                else pred.compare_to(tgt)
+            )
         diff = pred.diff_summary(tgt)
         trace_details: Dict[str, Any] = {}
         fix_suggestion = ""
@@ -82,6 +93,8 @@ def process_task(task_path: Path, trace: bool = False, perceptual: bool = False)
             "grid_diff": diff_grid(pred, tgt),
             "diff_summary": diff,
         }
+        if score_trace:
+            result["score_trace"] = trace_info
         if fix_suggestion:
             result["llm_fix"] = fix_suggestion
         if trace_details:
@@ -123,6 +136,7 @@ def main() -> None:
     )
     parser.add_argument("--dump_to", type=Path, default=Path("results.json"))
     parser.add_argument("--trace", action="store_true", help="Enable trace introspection")
+    parser.add_argument("--score-trace", action="store_true", help="Return scoring trace for each rule")
     parser.add_argument(
         "--perceptual",
         action="store_true",
@@ -138,7 +152,12 @@ def main() -> None:
     results: List[Dict[str, Any]] = []
     for path in task_files:
         try:
-            res = process_task(path, trace=args.trace, perceptual=args.perceptual)
+            res = process_task(
+                path,
+                trace=args.trace,
+                perceptual=args.perceptual,
+                score_trace=args.score_trace,
+            )
             results.append(res)
         except Exception as e:
             results.append({"task_id": path.stem, "error": str(e)})

@@ -25,7 +25,7 @@ Scores are no longer clipped to zero; negative values propagate to allow accurat
 
 ## 3. Scoring Functions
 ### score_rule()
-`score_rule(input_grid, output_grid, rule, prefer_composites=False)` returns the final score.  During abstraction the score may be adjusted by strategy bonuses and chain length penalties as shown around lines【F:arc_solver/src/abstractions/abstractor.py†L608-L623】.
+`score_rule(input_grid, output_grid, rule, prefer_composites=False, return_trace=False)` returns the final score.  When `return_trace=True` it instead yields a dictionary with similarity, penalty terms and the operations involved.  During abstraction the score may be adjusted by strategy bonuses and chain length penalties as shown around lines【F:arc_solver/src/abstractions/abstractor.py†L608-L623】.
 
 ### rule_cost()
 `rule_cost(rule)` estimates the complexity for sparsity ranking.  It is used both in `score_rule()` and for deduplication heuristics.
@@ -39,6 +39,7 @@ Scores above `0.8` are considered strong matches likely to contribute directly t
 rule <desc> raw=<raw> adj=<score> gain=<delta>
 ```
 Logging lines appear in the range【F:instrument.py†L92-L106】 and help trace why specific rules were kept or discarded.
+When `score_rule` runs with `return_trace=True` the resulting diagnostics are written to `failure_log.jsonl` whenever the final score falls below the acceptance threshold.
 
 ## 6. Issues Observed
 * **Bias against composites** – multi-step programs may still score slightly below atomic rules when similarity is imperfect.

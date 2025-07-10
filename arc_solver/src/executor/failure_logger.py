@@ -18,6 +18,7 @@ def log_failure(
     reason: str,
     color_lineage: Iterable[Iterable[int]] | None = None,
     intermediate_grids: Iterable[Iterable[Iterable[int]]] | None = None,
+    score_trace: Dict[str, Any] | None = None,
     path: str | Path = "failure_log.jsonl",
 ) -> None:
     """Append a failure diagnostic record as a JSON line to ``path``."""
@@ -32,6 +33,7 @@ def log_failure(
         "reason": reason,
         "color_lineage": [sorted(set(s)) for s in color_lineage or []],
         "intermediate_grids": list(intermediate_grids or []),
+        "score_trace": score_trace or {},
     }
 
     Path(path).parent.mkdir(parents=True, exist_ok=True)

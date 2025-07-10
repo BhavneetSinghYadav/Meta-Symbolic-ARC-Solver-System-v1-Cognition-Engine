@@ -72,6 +72,7 @@ def score_rule(
     *,
     prefer_composites: bool = False,
     details: bool = False,
+    return_trace: bool = False,
 ) -> float | Dict[str, float]:
     """Return heuristic score of ``rule`` for transforming ``input_grid`` to ``output_grid``.
 
@@ -108,6 +109,19 @@ def score_rule(
 
     final = base - penalty + bonus
 
+    trace = {
+        "similarity": float(base),
+        "unique_ops": int(_unique_ops(rule)),
+        "penalty": float(penalty),
+        "bonus": float(bonus),
+        "final_score": float(final),
+        "rule_steps": [
+            step.transformation.ttype.value for step in rule.steps
+        ]
+        if isinstance(rule, CompositeRule)
+        else [rule.transformation.ttype.value],
+    }
+
     if final < SCORE_FAILURE_THRESHOLD:
         log_failure(
             task_id=None,
@@ -119,7 +133,11 @@ def score_rule(
             reason="score_below_threshold",
             color_lineage=[],
             intermediate_grids=[],
+            score_trace=trace,
         )
+
+    if return_trace:
+        return trace
 
     if details:
         return {
