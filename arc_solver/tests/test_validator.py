@@ -4,6 +4,7 @@ from arc_solver.src.executor.validator import (
     validate_color_dependencies,
     validate_color_lineage,
 )
+from arc_solver.simulator import ColorLineageTracker
 from arc_solver.src.symbolic.vocabulary import Symbol, SymbolType, SymbolicRule, Transformation, TransformationType
 from arc_solver.src.symbolic.rule_language import CompositeRule
 
@@ -53,3 +54,29 @@ def test_validate_color_lineage_copy_paste_restore():
     )
     comp = CompositeRule([_rule(1, 2), translate, _rule(2, 1)])
     assert validate_color_lineage(comp, grid)
+
+
+def _repeat_rule(kx: int, ky: int) -> SymbolicRule:
+    return SymbolicRule(
+        transformation=Transformation(
+            TransformationType.REPEAT,
+            params={"kx": str(kx), "ky": str(ky)},
+        ),
+        source=[Symbol(SymbolType.COLOR, "1")],
+        target=[Symbol(SymbolType.COLOR, "1")],
+    )
+
+
+def test_training_color_override_accept():
+    inp = Grid([[1]])
+    comp = CompositeRule([
+        _repeat_rule(2, 1),
+        _rule(1, 2),
+    ])
+    tracker = ColorLineageTracker(inp)
+    assert validate_color_dependencies(
+        [comp],
+        inp,
+        training_colors={2},
+        lineage_tracker=tracker,
+    )

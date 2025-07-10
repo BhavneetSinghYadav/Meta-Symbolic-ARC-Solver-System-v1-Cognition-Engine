@@ -12,7 +12,7 @@ Composite rules represent a chain of symbolic transformations executed as a sing
 ## Known Issues
 * **Proxy translation bug** – earlier versions used `get_targets()` when constructing the proxy for dependency checks. This merged all step targets and broke `final_targets()` which expects only the last step. The fix introduced `final_targets()` and updated `as_symbolic_proxy()` to use it. 【F:arc_solver/src/symbolic/rule_language.py†L180-L203】
 * **Dependency misordering** – Because the proxy originally reported merged targets, dependency sorting placed composites after rules that should depend on them. The helper now returns the final step's targets to ensure correct order. 【F:arc_solver/src/executor/dependency.py†L30-L40】
-* **Execution skips** – Colour validation may still reject chains if a step removes colours that never reappear, though intermediate loss is tolerated.
+* **Execution skips** – Previous colour validation rejected chains when a step removed colours that never reappeared. The updated checker accepts such chains when the final colours match the training grid and logs lineage information.
 
 ## Patch Log
 * **Composite rule chaining support** – initial integration enabling multi‑step programs. 【1cdbb2†L28-L30】
@@ -26,9 +26,9 @@ Composite rules represent a chain of symbolic transformations executed as a sing
 * **Color validation update** – composite chains are validated as a whole with colour sufficiency checked only after the final step.【F:arc_solver/src/executor/simulator.py†L212-L340】
 * **Scoring overhaul** – penalties depend only on unique operation types and perfect composites receive a +0.2 bonus.【F:arc_solver/src/executor/scoring.py†L60-L109】
 * **Grid growth forecast** – `simulate_composite_safe()` now predicts composite size using `grid_growth_forecast()` and aborts when the limit is exceeded.【F:arc_solver/src/executor/simulator.py†L60-L123】
+* **Training colour lineage** – `validate_color_dependencies` accepts chains when the final colours match the training grid and records transitions via a lineage tracker.
 
 ## Remaining Failure Modes
-* Recolouring steps that introduce temporary colours can still cause validation rejection even after the lineage patch.
 * Proxy translation for advanced transformations (e.g. rotate within a composite) may misreport zones, leading to ordering mistakes.
 * Large grid expansions are validated ahead of time to avoid exceeding safety limits.
 
