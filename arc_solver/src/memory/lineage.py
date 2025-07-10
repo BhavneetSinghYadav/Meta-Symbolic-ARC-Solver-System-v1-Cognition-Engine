@@ -2,7 +2,10 @@ from __future__ import annotations
 
 """Utility for tracking rule lineage and scoring metadata."""
 
-from typing import Any, Dict, List, Optional
+import json
+from collections import defaultdict
+from pathlib import Path
+from typing import Any, DefaultDict, Dict, List, Optional
 
 
 class RuleLineageTracker:
@@ -48,3 +51,48 @@ class RuleLineageTracker:
                 exported[k] = v
             result[rid] = exported
         return result
+
+
+class LineageTracker:
+    """Record step-by-step lineage information for rule derivations."""
+
+    def __init__(self) -> None:
+        self._lineages: DefaultDict[str, List[Dict[str, Any]]] = defaultdict(list)
+
+    def add_step(self, rule_id: str, description: str, grid_state: Any) -> None:
+        """Append ``description`` and ``grid_state`` snapshot to ``rule_id`` lineage."""
+
+        if hasattr(grid_state, "to_list"):
+            grid = grid_state.to_list()
+        else:
+            grid = grid_state
+        self._lineages[rule_id].append({"description": description, "grid": grid})
+
+    def get_lineage(self, rule_id: str) -> List[Dict[str, Any]]:
+        """Return the tracked lineage steps for ``rule_id``."""
+
+        return list(self._lineages.get(rule_id, []))
+
+    def to_json(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Return a JSON serialisable view of all tracked lineages."""
+
+        return {rid: list(steps) for rid, steps in self._lineages.items()}
+
+    def dump_json(self, path: str | Path) -> None:
+        """Write all stored lineages to ``path`` in JSON format."""
+
+        p = Path(path)
+        with p.open("w", encoding="utf-8") as f:
+            json.dump(self.to_json(), f)
+
+    @classmethod
+    def from_json(cls, path: str | Path) -> "LineageTracker":
+        """Create a tracker from data stored at ``path``."""
+
+        p = Path(path)
+        with p.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        tracker = cls()
+        for rule_id, steps in data.items():
+            tracker._lineages[rule_id] = list(steps)
+        return tracker
