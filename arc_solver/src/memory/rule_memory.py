@@ -13,7 +13,7 @@ import json
 import hashlib
 
 from arc_solver.src.core.grid import Grid
-from arc_solver.src.symbolic.rule_language import rule_to_dsl
+from arc_solver.src.symbolic.rule_language import rule_to_dsl, parse_rule
 from arc_solver.src.symbolic.vocabulary import SymbolicRule
 from arc_solver.src.segment.segmenter import zone_overlay
 
@@ -28,17 +28,23 @@ class RuleMemory:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-    def suggest(self, input_grid: Grid) -> List[Dict[str, Any]]:
+    def suggest(self, input_grid: Grid, *, min_score: float = 0.9) -> List[SymbolicRule]:
         """Return stored rules ranked by similarity to ``input_grid``."""
         features = self._features(input_grid)
-        scored: List[Tuple[float, Dict[str, Any]]] = []
+        scored: List[Tuple[float, SymbolicRule]] = []
         for entries in self.memory.values():
             for item in entries:
+                if item.get("score", 0.0) < min_score:
+                    continue
                 sim = self._score_similarity(features, item.get("features", {}))
                 if sim > 0.5:
-                    scored.append((sim, item))
+                    try:
+                        rule = parse_rule(item["rule_dsl"])
+                    except Exception:
+                        continue
+                    scored.append((sim, rule))
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [item for _, item in scored]
+        return [rule for _, rule in scored]
 
     def record(
         self,

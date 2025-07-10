@@ -38,6 +38,9 @@ from arc_solver.src.introspection.visual_scoring import rerank_by_visual_score
 from arc_solver.src.meta_generalizer import generalize_rule_program
 from arc_solver.src.symbolic.rule_language import parse_rule, CompositeRule
 from arc_solver.src.executor.fallback_predictor import predict as base_fallback_predict
+from arc_solver.src.memory import RuleMemory
+
+_RULE_MEMORY = RuleMemory()
 
 fallback_predict = base_fallback_predict
 from arc_solver.src.introspection import (
@@ -134,6 +137,14 @@ def solve_task(
     ]
     test_inputs = [Grid(p["input"]) for p in task.get("test", [])]
     test_outputs = [Grid(p["output"]) for p in task.get("test", []) if "output" in p]
+
+    mem_suggestions: List = []
+    if use_memory and (train_pairs or test_inputs):
+        first_grid = train_pairs[0][0] if train_pairs else test_inputs[0]
+        try:
+            mem_suggestions = _RULE_MEMORY.suggest(first_grid)
+        except Exception:
+            mem_suggestions = []
 
     from arc_solver.src.utils.logger import get_logger
 
@@ -356,6 +367,8 @@ def solve_task(
 
     # Recall programs from memory or priors ---------------------------------
     candidate_sets = [select_independent_rules(rs) for rs, _ in ranked_rules]
+    if use_memory and mem_suggestions:
+        candidate_sets = [[r] for r in mem_suggestions] + candidate_sets
     if use_memory:
         constraints = (
             extract_task_constraints(train_pairs[0][0]) if train_pairs else None
@@ -402,6 +415,13 @@ def solve_task(
         for m in attn_masks:
             base = max(base, _train_score(rs, m))
         scores.append(base)
+        if task_id and train_pairs and base >= 0.9:
+            inp0, out0 = train_pairs[0]
+            for r in rs:
+                try:
+                    _RULE_MEMORY.record(task_id, r, inp0, out0)
+                except Exception:
+                    pass
         if logger:
             logger.info(f"candidate {rules_to_program(rs)} score={base:.3f}")
     prioritized = prioritize(candidate_sets, scores)
