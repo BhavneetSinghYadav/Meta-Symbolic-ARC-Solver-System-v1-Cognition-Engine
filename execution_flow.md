@@ -43,7 +43,7 @@ solve_task() → abstraction → scoring → validation → simulation → predi
 1. `solve_task` loads the training grid and extracts rules.
 2. `validate_color_dependencies` simulates each composite and checks colour sufficiency only at the final step. All candidates still fail to score above the threshold.
 3. Before falling back the solver now checks for any candidate rule whose raw similarity is `1.0`. Such rules are executed regardless of cost penalties. If none succeed the fallback predictor is invoked and the event is logged with `reason: high_cost_valid_rule`.
-4. The solver then invokes the fallback predictor, producing an all-zero grid, which is recorded in `submission.json`:
+4. The solver then invokes the fallback predictor. A dataset-ranked transformation (rotation or mirror) is applied before padding with the dominant colour. The result is recorded in `submission.json`:
    ```json
    {"00576224": [{"attempt_1": [[0,0,...]] ... }]
    ```

@@ -74,6 +74,11 @@ class Grid:
         flipped = [list(reversed(row)) for row in self.data]
         return Grid(flipped)
 
+    def flip_vertical(self) -> "Grid":
+        """Return a new grid flipped vertically."""
+        flipped = [row[:] for row in self.data[::-1]]
+        return Grid(flipped)
+
     def to_list(self) -> List[List[int]]:
         """Return a deep list copy of the grid data."""
         return [row[:] for row in self.data]
