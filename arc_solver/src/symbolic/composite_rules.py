@@ -14,17 +14,23 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationNature,
     TransformationType,
 )
+from arc_solver.src.symbolic.rule_language import CompositeRule
 
 
-def generate_repeat_composite_rules(input_grid: Grid, output_grid: Grid) -> List[SymbolicRule]:
-    """Return rules that repeat ``input_grid`` then recolor to match ``output_grid``."""
+def generate_repeat_composite_rules(input_grid: Grid, output_grid: Grid) -> List[CompositeRule]:
+    """Return composite rules repeating ``input_grid`` then recolouring to match ``output_grid``.
+
+    When multiple colour substitutions are required the function generates a chain
+    of ``REPLACE`` steps after the initial ``REPEAT``.  Each mapping is applied
+    sequentially so colour dependencies are tracked correctly during validation.
+    """
     repeat_rules = generate_repeat_rules(input_grid, output_grid)
     if not repeat_rules:
         return []
-    rule = repeat_rules[0]
+    base_rule = repeat_rules[0]
     try:
-        kx = int(rule.transformation.params.get("kx", "1"))
-        ky = int(rule.transformation.params.get("ky", "1"))
+        kx = int(base_rule.transformation.params.get("kx", "1"))
+        ky = int(base_rule.transformation.params.get("ky", "1"))
     except Exception:
         return []
     tiled = repeat_tile(input_grid, kx, ky)
@@ -42,20 +48,29 @@ def generate_repeat_composite_rules(input_grid: Grid, output_grid: Grid) -> List
                 mappings[src] = tgt
     if not mappings:
         return []
-    # For simplicity only generate composite rule when a single color mapping exists
-    if len(mappings) != 1:
-        return []
-    src_color, tgt_color = next(iter(mappings.items()))
-    composite_rule = SymbolicRule(
-        transformation=Transformation(
-            TransformationType.COMPOSITE,
-            params={"steps": ["REPEAT", "REPLACE"], "kx": str(kx), "ky": str(ky)},
-        ),
-        source=[Symbol(SymbolType.COLOR, str(src_color))],
-        target=[Symbol(SymbolType.COLOR, str(tgt_color))],
-        nature=TransformationNature.SPATIAL,
-    )
-    return [composite_rule]
+    steps: List[SymbolicRule] = [
+        SymbolicRule(
+            transformation=Transformation(
+                TransformationType.REPEAT,
+                params={"kx": str(kx), "ky": str(ky)},
+            ),
+            source=[Symbol(SymbolType.REGION, "All")],
+            target=[Symbol(SymbolType.REGION, "All")],
+            nature=TransformationNature.SPATIAL,
+        )
+    ]
+
+    for src_color, tgt_color in mappings.items():
+        steps.append(
+            SymbolicRule(
+                transformation=Transformation(TransformationType.REPLACE),
+                source=[Symbol(SymbolType.COLOR, str(src_color))],
+                target=[Symbol(SymbolType.COLOR, str(tgt_color))],
+            )
+        )
+
+    composite = CompositeRule(steps)
+    return [composite]
 
 
 __all__ = ["generate_repeat_composite_rules"]
