@@ -26,6 +26,7 @@ from arc_solver.src.symbolic.vocabulary import (
 )
 from arc_solver.src.symbolic.repeat_rule import generate_repeat_rules
 from arc_solver.src.configs.defaults import ENABLE_COMPOSITE_REPEAT
+from arc_solver.src.symbolic.zone_remap import zone_remap
 
 # Optional toggles controlling abstraction behaviour
 ENABLE_FALLBACK_COMPOSITES = True
@@ -515,6 +516,62 @@ def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[Symbo
     return rules
 
 
+def extract_zone_remap_rules(
+    input_grid: Grid, output_grid: Grid
+) -> List[SymbolicRule]:
+    """Return functional zone remap rules where entire zones recolour."""
+
+    if input_grid.shape() != output_grid.shape():
+        return []
+
+    overlay_syms = zone_overlay(input_grid)
+    h, w = input_grid.shape()
+
+    label_to_id: Dict[str, int] = {}
+    overlay_ids: List[List[int]] = [[-1 for _ in range(w)] for _ in range(h)]
+    zone_out: Dict[int, set[int]] = {}
+    zone_in: Dict[int, set[int]] = {}
+
+    for r in range(h):
+        for c in range(w):
+            sym = overlay_syms[r][c]
+            if sym is None:
+                continue
+            label = str(sym.value)
+            zid = label_to_id.setdefault(label, len(label_to_id) + 1)
+            overlay_ids[r][c] = zid
+            zone_in.setdefault(zid, set()).add(input_grid.get(r, c))
+            zone_out.setdefault(zid, set()).add(output_grid.get(r, c))
+
+    mapping: Dict[int, int] = {}
+    for zid in label_to_id.values():
+        in_colors = zone_in.get(zid, set())
+        out_colors = zone_out.get(zid, set())
+        if len(out_colors) == 1 and len(in_colors) == 1:
+            out_color = next(iter(out_colors))
+            if out_color != next(iter(in_colors)):
+                mapping[zid] = out_color
+
+    if not mapping:
+        return []
+
+    predicted = zone_remap(input_grid.to_list(), overlay_ids, mapping)
+    pred_grid = Grid(predicted if isinstance(predicted, list) else predicted.tolist())
+    if pred_grid != output_grid:
+        return []
+
+    rule = SymbolicRule(
+        transformation=Transformation(
+            TransformationType.FUNCTIONAL, params={"op": "zone_remap"}
+        ),
+        source=[Symbol(SymbolType.REGION, "All")],
+        target=[Symbol(SymbolType.REGION, "All")],
+        nature=TransformationNature.SPATIAL,
+        meta={"mapping": mapping},
+    )
+    return [rule]
+
+
 def split_rule_by_overlay(
     rule: SymbolicRule, grid: Grid, overlay: List[List[Symbol]]
 ) -> List[SymbolicRule]:
@@ -638,6 +695,10 @@ def abstract(
                     )
                     rr.meta.setdefault("secondary_rules", []).append(repl)
                     rules.append(repl)
+        zone_rules = extract_zone_remap_rules(input_grid, output_grid)
+        if logger:
+            logger.info(f"zone_remap_rules: {len(zone_rules)}")
+        rules.extend(zone_rules)
         split: List[SymbolicRule] = []
         for r in rules:
             if (
@@ -722,6 +783,7 @@ __all__ = [
     "extract_layout_rules",
     "extract_color_change_rules",
     "extract_shape_based_rules",
+    "extract_zone_remap_rules",
     "extract_zonewise_rules",
     "split_rule_by_overlay",
     "retest_rules_on_pairs",
