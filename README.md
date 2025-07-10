@@ -62,16 +62,30 @@ python instrument.py --bundle arc-agi_training_challenges.json --task_id 0000000
 Predicted grids for datasets are written to `submission.json`.  When `solve_task` runs with `debug=True` a detailed log file is created under `logs/` describing extracted rules, conflicts and scoring statistics.  Failures below a score threshold are appended to `logs/failure_log.jsonl` as JSON lines containing `intermediate_grids`, `color_lineage`, `rejection_stage` and, when score tracing is enabled, a `score_trace` breakdown.
 Fallback predictions are now skipped when a candidate rule exactly matches the target (`similarity==1.0`).  If such a rule exists but cannot be executed the fallback entry is tagged with `reason: high_cost_valid_rule` in the log.  When invoked the fallback predictor first applies the most common rotation or mirror operation observed in the training set before padding the grid with the dominant colour.  If composite rules fail outright the solver falls back to a simpler rule pipeline instead of immediately padding.
 
-## 7. Example Tasks & Visualizations
+## 7. Debug and Instrumentation Flow
+
+When ``solve_task`` is executed with ``debug=True`` the solver writes verbose
+trace entries under ``logs/``. These include scoring information and the
+predicted grids. The ``trace_visualizer`` tool can convert such a trace into a
+PDF highlighting mismatched zones and overlaying the best prediction.
+
+```bash
+trace_visualizer --task_id 00000001 \
+                 --trace_file logs/trace.jsonl \
+                 --task_file arc-agi_training_challenges.json \
+                 --solution_file arc-agi_training_solutions.json
+```
+
+## 8. Example Tasks & Visualizations
 
 Sample notebooks in [`arc_solver/notebooks`](arc_solver/notebooks) demonstrate zone overlays and trace debugging.  The `docs/` folder contains architecture diagrams.  Generated visualisations and experiment outputs are stored under `arc_solver/experiments`.
 
-## 8. Known Issues / Future Work
+## 9. Known Issues / Future Work
 
 * Conflict marking resizes the uncertainty grid to avoid `IndexError` when rules expand the working grid. `simulate_composite_safe()` forecasts growth beforehand to keep grids under `64x64`.
 * Some advanced scoring functions are placeholders (`TODO` in comments) and require tuning.
 
-## 9. Developer Notes
+## 10. Developer Notes
 
 * Run `pytest` before submitting changes.  All current tests should pass (142 tests)【69a983†L1-L4】.
 * GitHub Actions CI validates the same 142 tests on every push.
