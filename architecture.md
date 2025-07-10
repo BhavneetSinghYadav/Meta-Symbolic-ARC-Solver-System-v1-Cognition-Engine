@@ -21,11 +21,11 @@ Scoring aggregates similarity metrics and applies a small complexity penalty bas
 ## 4. Scoring System
 `executor/scoring.py` implements the heuristic formula used by `solve_task`:
 ```
-base = 0.6 * after_pixel + 0.3 * zone_match + 0.1 * shape_bonus
+base = 0.55 * after_pixel + 0.35 * zone_match + 0.1 * shape_bonus
 if after_pixel > before_pixel:
-    base += 0.2 * (after_pixel - before_pixel)
-penalty = 0.005 * unique_ops
-bonus = 0.2 if isinstance(rule, CompositeRule) and base == 1.0 else 0.0
+    base += 0.25 * (after_pixel - before_pixel)
+penalty = 0.006 * unique_ops
+bonus = 0.2 if isinstance(rule, CompositeRule) and base >= 0.95 else 0.0
 final = base - penalty + bonus
 ```
 Negative scores are no longer clipped, allowing fine-grained ranking.
