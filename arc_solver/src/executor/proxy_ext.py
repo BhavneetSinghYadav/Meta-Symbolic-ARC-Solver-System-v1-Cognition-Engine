@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any, List, Tuple
 
 from arc_solver.src.symbolic.rule_language import CompositeRule
-from arc_solver.src.symbolic.vocabulary import SymbolicRule, Symbol
+from arc_solver.src.symbolic.vocabulary import (
+    SymbolicRule,
+    Symbol,
+    TransformationType,
+)
 
 
 def merge_zones(steps) -> list[str]:
@@ -42,15 +46,14 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
     """Return a proxy rule describing ``rule`` for dependency sorting.
 
     The proxy exposes aggregated zone metadata alongside a ``zone_chain``
-    describing the input/output zone transition of each step.  ``zone_chain``
+    describing the input/output zone transition of each step. ``zone_chain``
     is used by :func:`sort_rules_by_topology` to build a dependency graph that
-    respects how composites move data across zones over time.
+    respects how composites move data across zones over time. Functional
+    operations like ``dilate_zone`` or ``zone_remap`` automatically record
+    their zone parameters so spatial dependencies are preserved.
     """
 
     cond: dict[str, Any] = rule.get_condition() or {}
-    merged_zones = merge_zones(rule.steps)
-    if len(merged_zones) == 1:
-        cond = {**cond, "zone": merged_zones[0]}
 
     last_step = rule.steps[-1]
     proxy = SymbolicRule(
@@ -72,8 +75,24 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
         return list(val)
 
     for step in rule.steps:
-        meta = getattr(step, "meta", {})
+        meta = dict(getattr(step, "meta", {}) or {})
         cond = getattr(step, "condition", None) or {}
+
+        if step.transformation.ttype is TransformationType.FUNCTIONAL:
+            op = step.transformation.params.get("op")
+            if op in {"dilate_zone", "erode_zone"}:
+                z = step.transformation.params.get("zone")
+                if z is not None:
+                    val = str(z)
+                    meta.setdefault("input_zones", [val])
+                    meta.setdefault("output_zones", [val])
+            elif op == "zone_remap":
+                mapping = step.transformation.params.get("map") or meta.get("mapping")
+                if isinstance(mapping, dict):
+                    zones = [str(k) for k in mapping.keys()]
+                    meta.setdefault("input_zones", zones)
+                    meta.setdefault("output_zones", zones)
+
         in_list = _to_list(meta.get("input_zones"))
         out_list = _to_list(meta.get("output_zones"))
         cond_list = _to_list(cond.get("zone"))
@@ -88,6 +107,10 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
 
         zone_chain.append((_first(in_list), _first(out_list)))
         zone_scopes.append((in_list, out_list))
+
+    merged_zones = sorted({z for ins, outs in zone_scopes for z in ins + outs if z})
+    if len(merged_zones) == 1:
+        cond = {**cond, "zone": merged_zones[0]}
 
     proxy.meta["input_zones"] = merged_zones
     proxy.meta["output_zones"] = merged_zones
