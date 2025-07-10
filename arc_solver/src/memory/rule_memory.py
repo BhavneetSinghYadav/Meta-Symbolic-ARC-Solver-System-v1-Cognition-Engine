@@ -108,4 +108,7 @@ class RuleMemory:
         return 0.5 * shape_sim + 0.3 * color_sim + 0.2 * zone_sim
 
 
-__all__ = ["RuleMemory"]
+__all__ = ["RuleMemory", "RULE_MEMORY"]
+
+# Global instance used across modules
+RULE_MEMORY = RuleMemory()

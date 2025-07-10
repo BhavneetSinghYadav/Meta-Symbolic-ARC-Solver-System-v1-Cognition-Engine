@@ -38,9 +38,7 @@ from arc_solver.src.introspection.visual_scoring import rerank_by_visual_score
 from arc_solver.src.meta_generalizer import generalize_rule_program
 from arc_solver.src.symbolic.rule_language import parse_rule, CompositeRule
 from arc_solver.src.executor.fallback_predictor import predict as base_fallback_predict
-from arc_solver.src.memory import RuleMemory
-
-_RULE_MEMORY = RuleMemory()
+from arc_solver.src.memory import RULE_MEMORY
 
 fallback_predict = base_fallback_predict
 from arc_solver.src.introspection import (
@@ -142,7 +140,7 @@ def solve_task(
     if use_memory and (train_pairs or test_inputs):
         first_grid = train_pairs[0][0] if train_pairs else test_inputs[0]
         try:
-            mem_suggestions = _RULE_MEMORY.suggest(first_grid)
+            mem_suggestions = RULE_MEMORY.suggest(first_grid)
         except Exception:
             mem_suggestions = []
 
@@ -419,7 +417,7 @@ def solve_task(
             inp0, out0 = train_pairs[0]
             for r in rs:
                 try:
-                    _RULE_MEMORY.record(task_id, r, inp0, out0)
+                    RULE_MEMORY.record(task_id, r, inp0, out0)
                 except Exception:
                     pass
         if logger:
@@ -467,6 +465,12 @@ def solve_task(
             if logger:
                 logger.info("LLM refinement applied")
                 logger.info(rules_to_program(best_rules))
+        except Exception:
+            pass
+
+    if task_id and train_pairs and best_rules:
+        try:
+            RULE_MEMORY.record(task_id, best_rules[0], train_pairs[0][0], train_pairs[0][1])
         except Exception:
             pass
 
