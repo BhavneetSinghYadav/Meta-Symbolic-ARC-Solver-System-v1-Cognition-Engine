@@ -47,6 +47,7 @@ except Exception:  # pragma: no cover - optional dependency
     dilate_zone = erode_zone = None  # type: ignore
 from arc_solver.src.symbolic.zone_remap import zone_remap
 from arc_solver.src.symbolic.rotate_about_point import rotate_about_point
+from arc_solver.src.segment.segmenter import label_connected_regions, zone_overlay
 
 
 logger = get_logger(__name__)
@@ -867,8 +868,10 @@ def _apply_functional(
             except Exception:
                 zone_id = zone_val
             try:
+                overlay = label_connected_regions(grid)
                 logger.debug("dilate_zone id=%s", zone_id)
-                return dilate_zone(grid, zone_id)
+                new = dilate_zone(grid.to_list(), zone_id, overlay)
+                return Grid(new if isinstance(new, list) else new.tolist())
             except Exception as exc:
                 raise RuleExecutionError(rule, str(exc)) from exc
 
@@ -879,8 +882,10 @@ def _apply_functional(
             except Exception:
                 zone_id = zone_val
             try:
+                overlay = label_connected_regions(grid)
                 logger.debug("erode_zone id=%s", zone_id)
-                return erode_zone(grid, zone_id)
+                new = erode_zone(grid.to_list(), zone_id, overlay)
+                return Grid(new if isinstance(new, list) else new.tolist())
             except Exception as exc:
                 raise RuleExecutionError(rule, str(exc)) from exc
 
