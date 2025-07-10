@@ -34,7 +34,7 @@ def test_generalize_rule_program():
     from arc_solver.src.core.grid import Grid
     rule = parse_rule("REPLACE [COLOR=0] -> [COLOR=1]")
     gens = generalize_rule_program([rule])
-    assert gens and len(gens) == 2
+    assert gens and len(gens) >= 2
     simulate_rules(Grid([[0]]), gens)
 
 

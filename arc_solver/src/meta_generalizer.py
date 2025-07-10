@@ -2,29 +2,23 @@ from __future__ import annotations
 
 """Simple rule program generalization utilities."""
 
-from typing import List
+from typing import List, Union
 
-from arc_solver.src.symbolic.vocabulary import SymbolicRule, Symbol, SymbolType
-from arc_solver.src.symbolic.vocabulary import TransformationType
-
-
-def mutate_rule(rule: SymbolicRule, task_signature: str | None = None) -> SymbolicRule:
-    """Return a lightly generalized variant of ``rule``."""
-    if rule.transformation.ttype is TransformationType.REPLACE and rule.source:
-        src = rule.source[0]
-        tgt = rule.target[0] if rule.target else src
-        # drop explicit source color to generalize
-        return SymbolicRule(rule.transformation, source=[], target=[tgt], nature=rule.nature, condition=rule.condition.copy())
-    return rule
+from arc_solver.src.symbolic.vocabulary import SymbolicRule
+from arc_solver.src.symbolic.rule_language import CompositeRule
+from arc_solver.src.symbolic.mutation import mutate_rule
 
 
-def generalize_rule_program(rules: List[SymbolicRule], task_signature: str | None = None) -> List[SymbolicRule]:
-    """Return a list containing original and generalized rules."""
-    out: List[SymbolicRule] = []
+def generalize_rule_program(
+    rules: List[SymbolicRule], task_signature: str | None = None
+) -> List[Union[SymbolicRule, CompositeRule]]:
+    """Return ``rules`` augmented with mutated variants."""
+
+    out: List[Union[SymbolicRule, CompositeRule]] = []
     for r in rules:
         out.append(r)
         try:
-            out.append(mutate_rule(r, task_signature))
+            out.extend(mutate_rule(r))
         except Exception:
             continue
     return out
