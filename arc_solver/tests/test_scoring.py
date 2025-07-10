@@ -8,6 +8,7 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationNature,
 )
 from arc_solver.src.executor.scoring import score_rule, preferred_rule_types
+from arc_solver.src.scoring.entropy_utils import grid_color_entropy
 import pytest
 
 
@@ -76,3 +77,16 @@ def test_score_rule_expected_value():
     score = score_rule(inp, out, rule)
     assert score == pytest.approx(1.244, rel=1e-3)
 
+
+def test_grid_color_entropy_extremes():
+    same = Grid([[1, 1], [1, 1]])
+    assert grid_color_entropy(same) == 0.0
+
+    uniform = Grid([[1, 2], [3, 4]])
+    assert grid_color_entropy(uniform) == pytest.approx(1.0, rel=1e-6)
+
+
+def test_grid_color_entropy_intermediate():
+    mixed = Grid([[1, 1, 1], [1, 1, 2]])
+    ent = grid_color_entropy(mixed)
+    assert 0.0 < ent < 1.0
