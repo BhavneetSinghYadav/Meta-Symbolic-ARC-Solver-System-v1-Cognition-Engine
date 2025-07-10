@@ -16,7 +16,7 @@ Input Grid → Abstraction → Rule Ranking → Simulation → Feedback/Memory
 * **Simulation** – applies rules with conflict resolution in [`executor`](arc_solver/src/executor)
 * **Feedback & memory** – optional refinement and program storage in [`feedback`](arc_solver/src/feedback) and [`memory`](arc_solver/src/memory)
 
-A more detailed walkthrough is available in [docs/architecture.md](docs/architecture.md).
+A more detailed walkthrough is available in [architecture.md](architecture.md).
 
 ## 3. Setup Instructions
 
