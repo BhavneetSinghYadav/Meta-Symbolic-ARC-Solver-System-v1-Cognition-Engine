@@ -37,6 +37,13 @@ from arc_solver.src.executor.dependency import (
 )
 from arc_solver.src.utils.grid_utils import validate_grid
 
+# === EXTENDED_OPERATOR_EXECUTION ===
+from arc_solver.src.symbolic.operators import mirror_tile
+from arc_solver.src.symbolic.pattern_fill_operator import pattern_fill
+from arc_solver.src.symbolic.draw_line import draw_line
+from arc_solver.src.symbolic.morphology_ops import dilate_zone, erode_zone
+from arc_solver.src.symbolic.rotate_about_point import rotate_about_point
+
 
 logger = get_logger(__name__)
 CONFLICT_POLICY = config_loader.META_CONFIG.get("conflict_resolution", "most_frequent")
@@ -125,6 +132,15 @@ class ReflexOverrideException(Exception):
 
 class ValidationError(Exception):
     """Raised when a rule would lead to an invalid grid state."""
+
+
+class RuleExecutionError(Exception):
+    """Raised when a symbolic operator fails during simulation."""
+
+    def __init__(self, rule: SymbolicRule, reason: str) -> None:
+        self.rule = rule
+        self.reason = reason
+        super().__init__(f"{rule}: {reason}")
 
 
 def _grid_contains(grid: Grid, value: int) -> bool:
@@ -638,6 +654,24 @@ def _apply_rotate90(
     return grid.rotate90(times)
 
 
+def _apply_rotate(
+    grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
+) -> Grid:
+    """Rotate the grid about a specific point by a multiple of 90 degrees."""
+    try:
+        cx = int(rule.transformation.params.get("cx", "0"))
+        cy = int(rule.transformation.params.get("cy", "0"))
+        angle = int(rule.transformation.params.get("angle", "0"))
+    except Exception as exc:
+        log_rule_failure(rule, failure_type="ROTATE", message="invalid parameters")
+        return grid
+    try:
+        logger.debug("rotate_about_point cx=%s cy=%s angle=%s", cx, cy, angle)
+        return rotate_about_point(grid, (cx, cy), angle)
+    except Exception as exc:
+        raise RuleExecutionError(rule, str(exc)) from exc
+
+
 def _apply_shape_abstract(
     grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
 ) -> Grid:
@@ -763,23 +797,94 @@ def _apply_functional(
     grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
 ) -> Grid:
     op = rule.transformation.params.get("op")
-    if op == "invert_diagonal":
-        h, w = grid.shape()
-        new_data = [row[:] for row in grid.data]
-        for r in range(h):
-            for c in range(w):
-                if attention_mask and not attention_mask[r][c]:
-                    new_data[r][c] = grid.get(r, c)
-                    continue
-                if r == c or r == w - c - 1:
-                    new_data[r][c] = grid.get(r, c)
-                else:
-                    new_data[r][c] = grid.get(r, c)
-        return Grid(new_data)
-    elif op == "flip_horizontal":
-        return grid.flip_horizontal()
-    log_rule_failure(rule, failure_type="FUNCTIONAL", message=f"unknown op {op}")
-    return grid
+
+    match op:
+        case "invert_diagonal":
+            h, w = grid.shape()
+            new_data = [row[:] for row in grid.data]
+            for r in range(h):
+                for c in range(w):
+                    if attention_mask and not attention_mask[r][c]:
+                        new_data[r][c] = grid.get(r, c)
+                        continue
+                    if r == c or r == w - c - 1:
+                        new_data[r][c] = grid.get(r, c)
+                    else:
+                        new_data[r][c] = grid.get(r, c)
+            return Grid(new_data)
+        case "flip_horizontal":
+            return grid.flip_horizontal()
+
+        # === EXTENDED_OPERATOR_EXECUTION ===
+        case "mirror_tile":
+            axis = rule.transformation.params.get("axis", "horizontal")
+            try:
+                repeats = int(rule.transformation.params.get("repeats", "1"))
+            except Exception as exc:
+                raise RuleExecutionError(rule, f"invalid repeats: {exc}") from exc
+            try:
+                logger.debug(
+                    "mirror_tile axis=%s repeats=%s", axis, repeats
+                )
+                return mirror_tile(grid, axis, repeats)
+            except Exception as exc:
+                raise RuleExecutionError(rule, str(exc)) from exc
+
+        case "pattern_fill":
+            mask = getattr(rule, "meta", {}).get("mask")
+            pattern = getattr(rule, "meta", {}).get("pattern")
+            if mask is None or pattern is None:
+                raise RuleExecutionError(rule, "missing mask or pattern")
+            try:
+                logger.debug("pattern_fill execution")
+                return pattern_fill(grid, mask, pattern)
+            except Exception as exc:
+                raise RuleExecutionError(rule, str(exc)) from exc
+
+        case "draw_line":
+            try:
+                p1_raw = rule.transformation.params.get("p1")
+                p2_raw = rule.transformation.params.get("p2")
+                color = int(rule.transformation.params.get("color", "0"))
+                p1 = tuple(int(x) for x in str(p1_raw).strip("() ").split(","))
+                p2 = tuple(int(x) for x in str(p2_raw).strip("() ").split(","))
+            except Exception as exc:
+                raise RuleExecutionError(rule, f"invalid parameters: {exc}") from exc
+            try:
+                logger.debug("draw_line p1=%s p2=%s color=%s", p1, p2, color)
+                return draw_line(grid, p1, p2, color)
+            except Exception as exc:
+                raise RuleExecutionError(rule, str(exc)) from exc
+
+        case "dilate_zone":
+            zone_val = rule.transformation.params.get("zone")
+            try:
+                zone_id = int(zone_val) if zone_val is not None else None
+            except Exception:
+                zone_id = zone_val
+            try:
+                logger.debug("dilate_zone id=%s", zone_id)
+                return dilate_zone(grid, zone_id)
+            except Exception as exc:
+                raise RuleExecutionError(rule, str(exc)) from exc
+
+        case "erode_zone":
+            zone_val = rule.transformation.params.get("zone")
+            try:
+                zone_id = int(zone_val) if zone_val is not None else None
+            except Exception:
+                zone_id = zone_val
+            try:
+                logger.debug("erode_zone id=%s", zone_id)
+                return erode_zone(grid, zone_id)
+            except Exception as exc:
+                raise RuleExecutionError(rule, str(exc)) from exc
+
+        case _:
+            log_rule_failure(
+                rule, failure_type="FUNCTIONAL", message=f"unknown op {op}"
+            )
+            return grid
 
 
 def safe_apply_rule(
@@ -852,6 +957,8 @@ def _safe_apply_rule(
         after = _apply_translate(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.REPEAT:
         after = _apply_repeat(grid, rule, attention_mask)
+    elif rule.transformation.ttype is TransformationType.ROTATE:
+        after = _apply_rotate(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.ROTATE90:
         after = _apply_rotate90(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.SHAPE_ABSTRACT:
@@ -1177,6 +1284,7 @@ __all__ = [
     "score_prediction",
     "ReflexOverrideException",
     "ValidationError",
+    "RuleExecutionError",
     "validate_rule_application",
     "check_symmetry_break",
     "visualize_uncertainty",
