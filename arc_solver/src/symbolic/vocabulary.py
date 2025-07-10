@@ -32,6 +32,11 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     rotate_about_point = None  # type: ignore
 
+try:
+    from .zone_remap import zone_remap
+except Exception:  # pragma: no cover - optional dependency
+    zone_remap = None  # type: ignore
+
 MAX_COLOR = 10
 
 
@@ -310,6 +315,21 @@ EXTENDED_OPERATORS: Dict[str, Dict[str, Any]] = {
             nature=TransformationNature.SPATIAL,
         ),
         "desc": "Rotate the grid around a pivot point.",
+    },
+    # Recolour segments based on zone IDs
+    "zone_remap": {
+        "factory": zone_remap,
+        "rule": lambda overlay, mapping: SymbolicRule(
+            transformation=Transformation(
+                TransformationType.FUNCTIONAL,
+                params={"op": "zone_remap"},
+            ),
+            source=[Symbol(SymbolType.REGION, "All")],
+            target=[Symbol(SymbolType.REGION, "All")],
+            nature=TransformationNature.SPATIAL,
+            meta={"mapping": mapping},
+        ),
+        "desc": "Remap colours of zones via an overlay mapping.",
     },
     # Placeholder for future operators
 }

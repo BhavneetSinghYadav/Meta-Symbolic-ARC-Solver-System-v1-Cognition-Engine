@@ -14,6 +14,7 @@ from .composite_rules import generate_repeat_composite_rules
 from .abstraction_dsl import rules_to_program, program_to_rules
 from .program_dsl import parse_program_expression
 from .pattern_fill_operator import pattern_fill
+from .zone_remap import zone_remap
 
 __all__ = [
     "Symbol",
@@ -32,4 +33,5 @@ __all__ = [
     "generate_repeat_composite_rules",
     "CompositeRule",
     "pattern_fill",
+    "zone_remap",
 ]
