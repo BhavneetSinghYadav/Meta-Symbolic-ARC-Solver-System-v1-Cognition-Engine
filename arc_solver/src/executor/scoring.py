@@ -14,6 +14,7 @@ from typing import Dict, List, Tuple
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
+from arc_solver.src.executor.failure_logger import log_failure
 from arc_solver.src.symbolic.rule_language import CompositeRule
 from arc_solver.src.symbolic.vocabulary import SymbolicRule
 
@@ -28,6 +29,8 @@ STRATEGY_REGISTRY: Dict[Tuple[str, ...], List[str]] = {
     ("grow",): ["REPEAT", "REPEAT→REPLACE"],
     ("equal",): ["TRANSLATE", "ROTATE"],
 }
+
+SCORE_FAILURE_THRESHOLD = 0.2
 
 
 def _shape_delta(input_grid: Grid, output_grid: Grid) -> str:
@@ -104,6 +107,19 @@ def score_rule(
     bonus = 0.2 if isinstance(rule, CompositeRule) and base == 1.0 else 0.0
 
     final = base - penalty + bonus
+
+    if final < SCORE_FAILURE_THRESHOLD:
+        log_failure(
+            task_id=None,
+            rule_id=str(rule),
+            rule_type="composite" if isinstance(rule, CompositeRule) else "atomic",
+            rule_steps=[str(s) for s in rule.steps] if isinstance(rule, CompositeRule) else [str(rule)],
+            rejection_stage="scoring",
+            failed_step_index=len(rule.steps) - 1 if isinstance(rule, CompositeRule) else 0,
+            reason="score_below_threshold",
+            color_lineage=[],
+            intermediate_grids=[],
+        )
 
     if details:
         return {

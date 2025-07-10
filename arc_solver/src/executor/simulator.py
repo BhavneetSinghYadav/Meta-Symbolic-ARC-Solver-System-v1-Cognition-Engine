@@ -21,6 +21,7 @@ from arc_solver.src.symbolic.vocabulary import validate_color_range, MAX_COLOR
 from arc_solver.src.symbolic.rule_language import CompositeRule
 from arc_solver.src.utils import config_loader
 from arc_solver.src.utils.coverage import rule_coverage
+from arc_solver.src.executor.validator import get_color_set
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import (
@@ -194,6 +195,7 @@ def validate_color_dependencies(
     strict: bool = False,
     lineage_tracker: ColorLineageTracker | None = None,
     step_state: "ColorLineage" | None = None,
+    task_id: str | None = None,
 ) -> List[SymbolicRule | CompositeRule]:
     """Return ``rules`` filtered by available colors.
 
@@ -207,6 +209,8 @@ def validate_color_dependencies(
     color_presence = {v for row in working.data for v in row}
     lineage: dict[int, str] = {}
     valid: list[SymbolicRule | CompositeRule] = []
+    intermediate_grids: List[List[List[int]]] = []
+    color_lineage: List[Set[int]] = []
     if step_state is None:
         step_state = ColorLineage(working)
 
@@ -225,6 +229,8 @@ def validate_color_dependencies(
             valid_chain = True
             if step_state:
                 step_state.record(step_grid)
+            color_lineage.append(get_color_set(step_grid))
+            intermediate_grids.append([row[:] for row in step_grid.data])
             for idx, step in enumerate(rule.steps):
                 try:
                     required = {
@@ -264,12 +270,15 @@ def validate_color_dependencies(
                         pass
                     else:
                         log_failure(
-                            {
-                                "rule": str(rule),
-                                "reason": "missing_color",
-                                "missing": missing,
-                                "snapshot": step_grid.data,
-                            }
+                            task_id=task_id,
+                            rule_id=str(rule),
+                            rule_type="composite",
+                            rule_steps=[str(s) for s in rule.steps],
+                            rejection_stage="validation",
+                            failed_step_index=idx,
+                            reason="missing_color",
+                            color_lineage=color_lineage + [get_color_set(step_grid)],
+                            intermediate_grids=intermediate_grids + [[row[:] for row in step_grid.data]],
                         )
                         if strict:
                             raise ValueError(f"Missing colors for rule: {rule}")
@@ -296,6 +305,8 @@ def validate_color_dependencies(
                 step_presence = {v for row in step_grid.data for v in row}
                 if step_state:
                     step_state.record(step_grid)
+            color_lineage.append(get_color_set(step_grid))
+            intermediate_grids.append([row[:] for row in step_grid.data])
 
             if not valid_chain:
                 continue
@@ -335,12 +346,15 @@ def validate_color_dependencies(
                                 f"Rule '{rule}' skipped – source color {c} no longer present{info}"
                             )
                 log_failure(
-                    {
-                        "rule": str(rule),
-                        "reason": "missing_color",
-                        "missing": missing,
-                        "snapshot": working.data,
-                    }
+                    task_id=task_id,
+                    rule_id=str(rule),
+                    rule_type="atomic",
+                    rule_steps=[str(rule)],
+                    rejection_stage="validation",
+                    failed_step_index=0,
+                    reason="missing_color",
+                    color_lineage=color_lineage + [get_color_set(working)],
+                    intermediate_grids=intermediate_grids + [[row[:] for row in working.data]],
                 )
                 if strict:
                     raise ValueError(f"Missing colors for rule: {rule}")
@@ -365,6 +379,8 @@ def validate_color_dependencies(
             lineage_tracker.observe_rule(rule, grid_before_apply, working)
         color_presence = after
         valid.append(rule)
+        color_lineage.append(get_color_set(working))
+        intermediate_grids.append([row[:] for row in working.data])
 
     return valid
 
@@ -837,6 +853,8 @@ def simulate_rules(
     )
 
     grid = Grid([row[:] for row in input_grid.data])
+    intermediate_grids: List[List[List[int]]] = [[row[:] for row in grid.data]]
+    color_lineage: List[Set[int]] = [get_color_set(grid)]
     # Pre-compute rule coverage and sort rules by descending impact
     coverage_pairs: list[tuple[SymbolicRule | CompositeRule, int]] = []
     for r in rules:
@@ -960,6 +978,8 @@ def simulate_rules(
         if lineage_tracker:
             lineage_tracker.observe_rule(rule, grid, tentative)
         grid = tentative
+        intermediate_grids.append([row[:] for row in grid.data])
+        color_lineage.append(get_color_set(grid))
         _resize_grid_like(uncertainty_grid, grid)
 
     policy = conflict_policy or CONFLICT_POLICY
@@ -1001,6 +1021,17 @@ def simulate_rules(
     if not validate_grid(grid, expected_shape=expected):
         if logger:
             logger.warning("simulation produced invalid grid; returning copy")
+        log_failure(
+            task_id=None,
+            rule_id=";".join(str(r) for r, _ in coverage_pairs),
+            rule_type="composite" if any(isinstance(r, CompositeRule) for r, _ in coverage_pairs) else "atomic",
+            rule_steps=[str(r) for r, _ in coverage_pairs],
+            rejection_stage="simulation",
+            failed_step_index=len(intermediate_grids) - 1,
+            reason="invalid_grid",
+            color_lineage=color_lineage,
+            intermediate_grids=intermediate_grids,
+        )
         grid = Grid([row[:] for row in input_grid.data])
 
     if rule_failures_log:

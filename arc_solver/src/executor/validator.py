@@ -33,6 +33,7 @@ def validate_color_dependencies(
     *,
     debug: bool = False,
     rule_id: str | None = None,
+    task_id: str | None = None,
 ) -> bool:
     """Validate that ``rule_chain`` preserves all required colours.
 
@@ -42,10 +43,12 @@ def validate_color_dependencies(
     """
     working = Grid([row[:] for row in input_grid.data])
     color_lineage: List[Set[int]] = []
+    intermediate_grids: List[List[List[int]]] = []
     required: Set[int] = set()
 
     for step in rule_chain:
         color_lineage.append(get_color_set(working))
+        intermediate_grids.append([row[:] for row in working.data])
         if isinstance(step, CompositeRule):
             sub_steps = step.steps
         else:
@@ -61,6 +64,7 @@ def validate_color_dependencies(
                         pass
             working = simulate_step(st, working)
     color_lineage.append(get_color_set(working))
+    intermediate_grids.append([row[:] for row in working.data])
 
     final_colors = color_lineage[-1]
     missing = {c for c in required if c not in final_colors}
@@ -73,23 +77,29 @@ def validate_color_dependencies(
                 divergence = i
                 break
         log_failure(
-            {
-                "rule": rule_id or "chain",
-                "reason": "missing_final_colors",
-                "missing": sorted(missing),
-                "divergence_step": divergence,
-                "color_lineage": [sorted(list(s)) for s in color_lineage],
-            }
+            task_id=task_id,
+            rule_id=rule_id or "chain",
+            rule_type="composite",
+            rule_steps=[str(s) for s in rule_chain],
+            rejection_stage="validation",
+            failed_step_index=divergence,
+            reason="missing_final_colors",
+            color_lineage=color_lineage,
+            intermediate_grids=intermediate_grids,
         )
         return False
 
     if debug:
         log_failure(
-            {
-                "rule": rule_id or "chain",
-                "reason": "debug_lineage",
-                "color_lineage": [sorted(list(s)) for s in color_lineage],
-            }
+            task_id=task_id,
+            rule_id=rule_id or "chain",
+            rule_type="composite",
+            rule_steps=[str(s) for s in rule_chain],
+            rejection_stage="validation",
+            failed_step_index=None,
+            reason="debug_lineage",
+            color_lineage=color_lineage,
+            intermediate_grids=intermediate_grids,
         )
     return True
 
