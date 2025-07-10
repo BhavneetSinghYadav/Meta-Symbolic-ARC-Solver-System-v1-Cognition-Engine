@@ -51,8 +51,56 @@ from arc_solver.src.introspection import (
 )
 from arc_solver.src.symbolic import rules_to_program
 from arc_solver.src.utils import config_loader
+from arc_solver.src.executor.scoring import score_rule
 
 _FAILURE_LOG = Path("logs/failure_log.json")
+_RECOVERY_LOG = Path("failure_log.jsonl")
+
+
+def simulate_candidate_rules(
+    candidates: List,
+    train_pairs: List[Tuple[Grid, Grid]],
+    test_inputs: List[Grid],
+    *,
+    threshold: float = 0.8,
+    logger=None,
+) -> tuple[list[Grid] | None, object | None, float]:
+    """Return predictions from the best scoring candidate rule.
+
+    Rules are scored on the training pairs using :func:`score_rule`. The rule
+    with the highest average score above ``threshold`` is simulated on the test
+    inputs.  The function returns the predicted grids, the rule itself and its
+    score.  ``None`` is returned when no candidate surpasses the threshold.
+    """
+
+    best_rule = None
+    best_score = 0.0
+    best_preds: list[Grid] | None = None
+
+    for rule in candidates:
+        try:
+            if train_pairs:
+                score = (
+                    sum(score_rule(inp, out, rule) for inp, out in train_pairs)
+                    / len(train_pairs)
+                )
+            else:
+                score = 0.0
+            if logger:
+                logger.debug(f"candidate {rule} train_score={score:.3f}")
+        except Exception:
+            continue
+
+        if score > best_score and score >= threshold:
+            try:
+                preds = [simulate_rules(g, [rule], logger=logger) for g in test_inputs]
+            except Exception:
+                continue
+            best_rule = rule
+            best_score = score
+            best_preds = preds
+
+    return best_preds, best_rule, best_score
 
 
 def solve_task(
@@ -236,6 +284,28 @@ def solve_task(
         )
     best_rules: List = ranked_rules[0][0] if ranked_rules else []
     if not best_rules:
+        candidates = [r for rs in rule_sets for r in rs]
+        rescue_preds, rescue_rule, rescue_score = simulate_candidate_rules(
+            candidates,
+            train_pairs,
+            test_inputs,
+            logger=logger,
+        )
+        if rescue_preds:
+            if logger:
+                logger.info("fallback bypassed via recovery simulation")
+            if task_id:
+                try:
+                    entry = {
+                        "task_id": task_id,
+                        "rescue_source": "post-validation composite simulation",
+                        "rescued_rule": str(rescue_rule),
+                        "score": rescue_score,
+                    }
+                    _RECOVERY_LOG.open("a", encoding="utf-8").write(json.dumps(entry) + "\n")
+                except Exception:
+                    pass
+            return rescue_preds, test_outputs, [], [rescue_rule]
         if logger:
             logger.warning("no candidate rules; using fallback predictor")
         predictions = [_fallback(g) for g in test_inputs]
