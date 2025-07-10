@@ -1,6 +1,10 @@
 ## 1. System Overview
 The meta‑symbolic ARC solver infers a small program of symbolic rules for each task in the Abstraction and Reasoning Corpus.  Rules are instances of `SymbolicRule` and may be chained into `CompositeRule` programs.  The solver emphasises traceable reasoning over opaque learning: every transformation can be logged and simulated step by step.
 
+Recent updates extend the rule language with `SHAPE_ABSTRACT` and `ROTATE90`
+transformation types, enabling explicit reasoning about shape similarity and
+grid rotation.
+
 ## 2. Execution Pipeline
 1. **Input parsing** – Tasks are loaded as `Grid` pairs.  `solve_task` in [`executor/full_pipeline.py`](arc_solver/src/executor/full_pipeline.py) reads the JSON description and converts the examples to `Grid` objects.
 2. **Rule abstraction** – For each training pair `abstract()` from [`abstractions/abstractor.py`](arc_solver/src/abstractions/abstractor.py) generates candidate rules.  `generalize_rules()` and `remove_duplicate_rules()` in [`abstractions/rule_generator.py`](arc_solver/src/abstractions/rule_generator.py) clean and deduplicate the list.  Repeat based composites are produced via [`symbolic/repeat_rule.py`](arc_solver/src/symbolic/repeat_rule.py) and [`symbolic/composite_rules.py`](arc_solver/src/symbolic/composite_rules.py).

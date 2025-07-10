@@ -626,6 +626,25 @@ def _apply_repeat(
     return tiled
 
 
+def _apply_rotate90(
+    grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
+) -> Grid:
+    """Rotate the entire grid by multiples of 90 degrees."""
+    try:
+        times = int(rule.transformation.params.get("times", "1")) % 4
+    except Exception:
+        log_rule_failure(rule, failure_type="ROTATE90", message="invalid rotation")
+        return grid
+    return grid.rotate90(times)
+
+
+def _apply_shape_abstract(
+    grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
+) -> Grid:
+    """Placeholder for shape abstraction – currently a no-op."""
+    return grid
+
+
 def _apply_conditional(
     grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
 ) -> Grid:
@@ -833,6 +852,10 @@ def _safe_apply_rule(
         after = _apply_translate(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.REPEAT:
         after = _apply_repeat(grid, rule, attention_mask)
+    elif rule.transformation.ttype is TransformationType.ROTATE90:
+        after = _apply_rotate90(grid, rule, attention_mask)
+    elif rule.transformation.ttype is TransformationType.SHAPE_ABSTRACT:
+        after = _apply_shape_abstract(grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.COMPOSITE:
         after = _apply_repeat(grid, rule, attention_mask)
         after = _apply_replace(after, rule, attention_mask, lineage_tracker=lineage_tracker)
