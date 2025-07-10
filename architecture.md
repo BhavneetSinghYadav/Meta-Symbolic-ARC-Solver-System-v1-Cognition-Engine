@@ -30,7 +30,7 @@ Negative scores are no longer clipped, allowing fine-grained ranking.
 [`instrument.py`](instrument.py) decorates rule generators and simulator helpers with simple print logging.  When `solve_task` is invoked with `debug=True` a per‑task logger is created (`get_logger()` from [`utils/logger.py`](arc_solver/src/utils/logger.py)) and detailed trace entries are written.  Conflict locations and zone mismatches are recorded through `mark_conflict()` and `rule_failures_log` inside `simulator.py`.
 
 ## 6. Known Limitations & Failure Cases
-* **Grid expansion overflows** – applying translations or repeats can enlarge the grid beyond the working area.  `mark_conflict()` resizes the uncertainty grid to avoid `IndexError` but extreme cases still fail.
+* **Grid expansion overflows** – composite steps now forecast growth and abort when exceeding `64x64`, resizing the uncertainty grid proactively when safe.
 * **Divergent predictions** – tasks such as `00576224` in `submission.json` show zero‑valued predictions where rules could not be validated against the training colours.
 
 ## 7. Design Philosophy
