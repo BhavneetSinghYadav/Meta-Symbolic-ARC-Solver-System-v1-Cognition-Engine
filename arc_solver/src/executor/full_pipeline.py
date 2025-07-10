@@ -64,7 +64,7 @@ def simulate_candidate_rules(
     *,
     threshold: float = 0.8,
     logger=None,
-) -> tuple[list[Grid] | None, object | None, float]:
+) -> tuple[list[Grid] | None, object | None, float, object | None]:
     """Return predictions from the best scoring candidate rule.
 
     Rules are scored on the training pairs using :func:`score_rule`. The rule
@@ -76,20 +76,32 @@ def simulate_candidate_rules(
     best_rule = None
     best_score = 0.0
     best_preds: list[Grid] | None = None
+    perfect_rule = None
 
     for rule in candidates:
         try:
             if train_pairs:
-                score = (
-                    sum(score_rule(inp, out, rule) for inp, out in train_pairs)
-                    / len(train_pairs)
-                )
+                traces = [
+                    score_rule(inp, out, rule, return_trace=True)
+                    for inp, out in train_pairs
+                ]
+                score = sum(t["final_score"] for t in traces) / len(traces)
+                is_perfect = all(t.get("similarity", 0.0) == 1.0 for t in traces)
             else:
                 score = 0.0
+                is_perfect = False
             if logger:
                 logger.debug(f"candidate {rule} train_score={score:.3f}")
         except Exception:
             continue
+
+        if is_perfect:
+            perfect_rule = rule
+            try:
+                preds = [simulate_rules(g, [rule], logger=logger) for g in test_inputs]
+            except Exception:
+                continue
+            return preds, rule, score, perfect_rule
 
         if score > best_score and score >= threshold:
             try:
@@ -100,7 +112,7 @@ def simulate_candidate_rules(
             best_score = score
             best_preds = preds
 
-    return best_preds, best_rule, best_score
+    return best_preds, best_rule, best_score, perfect_rule
 
 
 def solve_task(
@@ -285,7 +297,7 @@ def solve_task(
     best_rules: List = ranked_rules[0][0] if ranked_rules else []
     if not best_rules:
         candidates = [r for rs in rule_sets for r in rs]
-        rescue_preds, rescue_rule, rescue_score = simulate_candidate_rules(
+        rescue_preds, rescue_rule, rescue_score, perfect_rule = simulate_candidate_rules(
             candidates,
             train_pairs,
             test_inputs,
@@ -298,7 +310,7 @@ def solve_task(
                 try:
                     entry = {
                         "task_id": task_id,
-                        "rescue_source": "post-validation composite simulation",
+                        "rescue_source": "perfect_match_override" if perfect_rule else "post-validation composite simulation",
                         "rescued_rule": str(rescue_rule),
                         "score": rescue_score,
                     }
@@ -308,6 +320,16 @@ def solve_task(
             return rescue_preds, test_outputs, [], [rescue_rule]
         if logger:
             logger.warning("no candidate rules; using fallback predictor")
+        if perfect_rule and task_id:
+            try:
+                entry = {
+                    "task_id": task_id,
+                    "reason": "high_cost_valid_rule",
+                    "rule": str(perfect_rule),
+                }
+                _RECOVERY_LOG.open("a", encoding="utf-8").write(json.dumps(entry) + "\n")
+            except Exception:
+                pass
         predictions = [_fallback(g) for g in test_inputs]
         if logger:
             logger.debug(f"fallback_triggers={fallback_count}")
