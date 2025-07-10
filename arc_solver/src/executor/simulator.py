@@ -45,6 +45,7 @@ try:
     from arc_solver.src.symbolic.morphology_ops import dilate_zone, erode_zone
 except Exception:  # pragma: no cover - optional dependency
     dilate_zone = erode_zone = None  # type: ignore
+from arc_solver.src.symbolic.zone_remap import zone_remap
 from arc_solver.src.symbolic.rotate_about_point import rotate_about_point
 
 
@@ -880,6 +881,18 @@ def _apply_functional(
             try:
                 logger.debug("erode_zone id=%s", zone_id)
                 return erode_zone(grid, zone_id)
+            except Exception as exc:
+                raise RuleExecutionError(rule, str(exc)) from exc
+
+        case "zone_remap":
+            mapping = getattr(rule, "meta", {}).get("mapping")
+            if not isinstance(mapping, dict):
+                raise RuleExecutionError(rule, "missing mapping")
+            try:
+                overlay = zone_overlay(grid)
+                logger.debug("zone_remap mapping=%s", mapping)
+                new_grid = zone_remap(grid.to_list(), overlay, mapping)
+                return Grid(new_grid)
             except Exception as exc:
                 raise RuleExecutionError(rule, str(exc)) from exc
 
