@@ -8,6 +8,7 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationNature,
 )
 from arc_solver.src.executor.scoring import score_rule, preferred_rule_types
+import pytest
 
 
 def test_rule_scoring_on_tiling_vs_replace():
@@ -61,4 +62,17 @@ def test_score_trace_logging(monkeypatch):
 
     assert trace["final_score"] < 0.2
     assert captured.get("score_trace") == trace
+
+
+def test_score_rule_expected_value():
+    inp = Grid([[1]])
+    out = Grid([[2]])
+    rule = SymbolicRule(
+        transformation=Transformation(TransformationType.REPLACE),
+        source=[Symbol(SymbolType.COLOR, "1")],
+        target=[Symbol(SymbolType.COLOR, "2")],
+    )
+
+    score = score_rule(inp, out, rule)
+    assert score == pytest.approx(1.244, rel=1e-3)
 

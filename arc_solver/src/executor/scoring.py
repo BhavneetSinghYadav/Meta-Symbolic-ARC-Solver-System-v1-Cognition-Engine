@@ -97,18 +97,18 @@ def score_rule(
     shape_bonus = 1.0 if pred.shape() == output_grid.shape() else 0.0
 
     # Basic similarity score
-    base = 0.6 * after_pixel + 0.3 * zone_match + 0.1 * shape_bonus
+    base = 0.55 * after_pixel + 0.35 * zone_match + 0.1 * shape_bonus
 
     # Reward improvement over the input similarity
     improvement = after_pixel - before_pixel
     if improvement > 0:
-        base += 0.2 * improvement
+        base += 0.25 * improvement
 
     # Complexity penalty based on unique operation types
-    penalty = 0.005 * _unique_ops(rule)
+    penalty = 0.006 * _unique_ops(rule)
 
     # Composite bonus only when the rule perfectly matches the output
-    bonus = 0.2 if isinstance(rule, CompositeRule) and base == 1.0 else 0.0
+    bonus = 0.2 if isinstance(rule, CompositeRule) and base >= 0.95 else 0.0
 
     final = base - penalty + bonus
 

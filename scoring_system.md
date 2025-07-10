@@ -5,11 +5,11 @@ The scoring system ranks candidate rules by their expected contribution to solvi
 `score_rule()` in [`executor/scoring.py`](arc_solver/src/executor/scoring.py) evaluates a rule by simulating it and combining similarity metrics with a complexity penalty:
 
 ```
-base = 0.6 * after_pixel + 0.3 * zone_match + 0.1 * shape_bonus
+base = 0.55 * after_pixel + 0.35 * zone_match + 0.1 * shape_bonus
 if after_pixel > before_pixel:
-    base += 0.2 * (after_pixel - before_pixel)
-penalty = 0.005 * unique_ops
-bonus = 0.2 if isinstance(rule, CompositeRule) and base == 1.0 else 0.0
+    base += 0.25 * (after_pixel - before_pixel)
+penalty = 0.006 * unique_ops
+bonus = 0.2 if isinstance(rule, CompositeRule) and base >= 0.95 else 0.0
 final = base - penalty + bonus
 ```
 Lines【F:arc_solver/src/executor/scoring.py†L60-L109】 detail this logic. `after_pixel` is the raw grid match after applying the rule. `zone_match` measures how well labelled zones align, and `shape_bonus` rewards correct output shape. `unique_ops` counts the distinct operation types in the rule.
@@ -18,7 +18,7 @@ Lines【F:arc_solver/src/executor/scoring.py†L60-L109】 detail this logic. `a
 `unique_ops()` returns the number of distinct transformations used by a rule. This replaces the previous heavy dependence on `rule_cost`.
 
 ### 2.2 Composite Bonus
-A composite rule that perfectly matches the target receives a `+0.2` bonus.
+A composite rule that matches at least 95% similarity receives a `+0.2` bonus.
 
 ### 2.3 Score Range
 Scores are no longer clipped to zero; negative values propagate to allow accurate ranking of poor candidates.
@@ -47,7 +47,7 @@ When `score_rule` runs with `return_trace=True` the resulting diagnostics are wr
 ## 7. Refinements & Suggestions
 Several refinements were applied or proposed:
 * **Dynamic cost adjustment** – the penalty factor now uses the number of unique operations.
-* **Similarity boosting** – the improvement bonus remains capped at `+0.2`.
+* **Similarity boosting** – the improvement bonus now adds up to `+0.25`.
 * **Composite bonus** – perfect chains receive an explicit bonus instead of penalty scaling.
 
 ## 8. Scoring Philosophy
