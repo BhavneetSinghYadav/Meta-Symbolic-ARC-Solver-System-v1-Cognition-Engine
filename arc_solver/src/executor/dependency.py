@@ -69,28 +69,40 @@ def sort_rules_by_dependency(rules: List[SymbolicRule | CompositeRule]) -> List[
 def sort_rules_by_topology(rules: List[SymbolicRule | CompositeRule]) -> List[SymbolicRule | CompositeRule]:
     """Return ``rules`` ordered respecting zone transition dependencies."""
 
-    chains: List[List[Tuple[str | None, str | None]]] = []
+    chains: List[List[Tuple[List[str], List[str]]]] = []
     for rule in rules:
         if isinstance(rule, CompositeRule):
             proxy = rule.as_symbolic_proxy()
-            chains.append(proxy.meta.get("zone_chain", []))
+            chain = proxy.meta.get("zone_scope_chain")
+            if not chain:
+                chain = [
+                    ([z1] if z1 else [], [z2] if z2 else [])
+                    for z1, z2 in proxy.meta.get("zone_chain", [])
+                ]
+            chains.append(chain)
         else:
             zone = rule.condition.get("zone") if rule.condition else None
-            chains.append([(zone, zone)])
+            chains.append([([zone] if zone else [], [zone] if zone else [])])
 
     graph = rule_dependency_graph(rules)
+
+    def _union(seq):
+        s: Set[str] = set()
+        for item in seq:
+            s.update(item)
+        return s
 
     for i, c1 in enumerate(chains):
         if not c1:
             continue
-        out_zone = c1[-1][1]
-        if not out_zone:
+        out_union = _union([set(out) for _, out in c1])
+        if not out_union:
             continue
         for j, c2 in enumerate(chains):
             if i == j or not c2:
                 continue
-            in_zone = c2[0][0]
-            if in_zone and in_zone == out_zone:
+            in_first = set(c2[0][0])
+            if in_first and out_union.intersection(in_first):
                 graph.setdefault(i, set()).add(j)
 
     indegree: Dict[int, int] = {i: 0 for i in range(len(rules))}

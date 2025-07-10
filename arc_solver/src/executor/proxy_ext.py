@@ -62,33 +62,38 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
     )
 
     zone_chain: List[Tuple[str | None, str | None]] = []
+    zone_scopes: List[Tuple[List[str], List[str]]] = []
+
+    def _to_list(val: Any) -> List[str]:
+        if not val:
+            return []
+        if isinstance(val, str):
+            return [val]
+        return list(val)
+
     for step in rule.steps:
         meta = getattr(step, "meta", {})
-        in_val = meta.get("input_zones")
-        out_val = meta.get("output_zones")
+        cond = getattr(step, "condition", None) or {}
+        in_list = _to_list(meta.get("input_zones"))
+        out_list = _to_list(meta.get("output_zones"))
+        cond_list = _to_list(cond.get("zone"))
 
-        def _first(val):
-            if not val:
-                return None
-            if isinstance(val, str):
-                return val
-            return val[0] if len(val) == 1 else None
+        if not in_list:
+            in_list = cond_list
+        if not out_list:
+            out_list = cond_list
 
-        in_zone = _first(in_val)
-        out_zone = _first(out_val)
+        def _first(lst: List[str]) -> str | None:
+            return lst[0] if lst else None
 
-        if in_zone is None or out_zone is None:
-            zone = (getattr(step, "condition", None) or {}).get("zone")
-            if isinstance(zone, str):
-                in_zone = in_zone or zone
-                out_zone = out_zone or zone
-
-        zone_chain.append((in_zone, out_zone))
+        zone_chain.append((_first(in_list), _first(out_list)))
+        zone_scopes.append((in_list, out_list))
 
     proxy.meta["input_zones"] = merged_zones
     proxy.meta["output_zones"] = merged_zones
     proxy.meta["step_count"] = len(rule.steps)
     proxy.meta["zone_chain"] = zone_chain
+    proxy.meta["zone_scope_chain"] = zone_scopes
     return proxy
 
 
