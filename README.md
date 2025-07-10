@@ -1,5 +1,7 @@
 # Meta-Symbolic ARC Solver System
 
+![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
+
 ## 1. Project Overview
 
 This repository contains a symbolic solver for the [Abstraction and Reasoning Corpus (ARC)](https://github.com/arcprize/ARC-AGI-2).  The solver infers a set of symbolic rules from provided training examples and applies them to unseen test grids.  The design emphasises interpretability: rules are represented as structured `SymbolicRule` objects and can be chained into `CompositeRule` programs.  Recent updates added composite rule scoring, failure logging and a safer conflict tracking mechanism.
@@ -72,6 +74,7 @@ Sample notebooks in [`arc_solver/notebooks`](arc_solver/notebooks) demonstrate z
 ## 9. Developer Notes
 
 * Run `pytest` before submitting changes.  All current tests should pass (142 tests)【69a983†L1-L4】.
+* GitHub Actions CI validates the same 142 tests on every push.
 * Keep new modules under the existing `arc_solver/src` hierarchy.
 * Contributions that extend the rule vocabulary or improve the ranking heuristics are welcome; please document new behaviour in this README.
 
