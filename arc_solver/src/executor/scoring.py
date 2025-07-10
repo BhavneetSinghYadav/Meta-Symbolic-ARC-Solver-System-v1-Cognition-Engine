@@ -16,6 +16,11 @@ from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.executor.failure_logger import log_failure
 from arc_solver.src.symbolic.rule_language import CompositeRule
 from arc_solver.src.symbolic.vocabulary import SymbolicRule, TransformationType
+from arc_solver.src.scoring.zone_adjustments import (
+    zone_alignment_bonus,
+    zone_coverage_weight,
+    zone_entropy_penalty,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -47,6 +52,9 @@ OP_WEIGHTS: Dict[TransformationType, float] = {
     TransformationType.FUNCTIONAL: 1.3,
     TransformationType.COMPOSITE: 1.0,
 }
+
+# Optional zone-aware scoring adjustments
+ENABLE_ZONE_SCORING = False
 
 
 def _shape_delta(input_grid: Grid, output_grid: Grid) -> str:
@@ -145,13 +153,28 @@ def score_rule(
 
     final = base - penalty + bonus
 
+    score = final
+
+    # === Zone-Aware Scoring Hooks (Optional) ===
+    if ENABLE_ZONE_SCORING:
+        z_pen = zone_entropy_penalty(input_grid, rule)
+        z_bonus = zone_alignment_bonus(input_grid, output_grid, rule)
+        z_weight = zone_coverage_weight(input_grid, output_grid)
+        score -= z_pen
+        score += z_bonus
+        score *= z_weight
+    else:
+        z_pen = 0.0
+        z_bonus = 0.0
+        z_weight = 1.0
+
     trace = {
         "similarity": float(base),
         "unique_ops": int(_unique_ops(rule)),
         "op_cost": float(_op_cost(rule)),
         "penalty": float(penalty),
         "bonus": float(bonus),
-        "final_score": float(final),
+        "final_score": float(score),
         "rule_steps": [
             step.transformation.ttype.value for step in rule.steps
         ]
@@ -159,7 +182,12 @@ def score_rule(
         else [rule.transformation.ttype.value],
     }
 
-    if final < SCORE_FAILURE_THRESHOLD:
+    if ENABLE_ZONE_SCORING:
+        trace["zone_entropy_penalty"] = float(z_pen)
+        trace["zone_alignment_bonus"] = float(z_bonus)
+        trace["zone_coverage_weight"] = float(z_weight)
+
+    if score < SCORE_FAILURE_THRESHOLD:
         log_failure(
             task_id=None,
             rule_id=str(rule),
@@ -182,10 +210,10 @@ def score_rule(
             "op_cost": float(_op_cost(rule)),
             "penalty": float(penalty),
             "bonus": float(bonus),
-            "final_score": float(final),
+            "final_score": float(score),
         }
 
-    return final
+    return score
 
 
 __all__ = ["score_rule", "preferred_rule_types", "STRATEGY_REGISTRY"]
