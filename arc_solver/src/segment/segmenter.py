@@ -5,6 +5,9 @@ from __future__ import annotations
 from collections import deque
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
+from skimage.morphology import skeletonize
+
 from ..core.grid import Grid
 from ..symbolic.vocabulary import Symbol, SymbolType
 
@@ -90,13 +93,46 @@ def segment_connected_regions(grid: Grid) -> Dict[int, List[Tuple[int, int]]]:
 
 
 # ---------------------------------------------------------------------------
+# Morphological segmentation
+# ---------------------------------------------------------------------------
+
+def segment_morphological_regions(grid: Grid) -> Dict[Tuple[int, int], Symbol]:
+    """Return skeleton-based zones for each non-zero color."""
+
+    data = np.array(grid.data)
+    zones: Dict[Tuple[int, int], Symbol] = {}
+    for color in np.unique(data):
+        if color == 0:
+            continue
+        mask = data == color
+        if not np.any(mask):
+            continue
+        skel = skeletonize(mask)
+        label = Symbol(SymbolType.ZONE, f"Skeleton{int(color)}")
+        for r, c in zip(*np.nonzero(skel)):
+            zones[(int(r), int(c))] = label
+    return zones
+
+
+# ---------------------------------------------------------------------------
 # Overlay utilities
 # ---------------------------------------------------------------------------
 
-def zone_overlay(grid: Grid) -> List[List[Optional[Symbol]]]:
-    """Return zone label overlay matrix for ``grid``."""
+def zone_overlay(
+    grid: Grid, *, use_morphology: bool | None = False
+) -> List[List[Optional[Symbol]]]:
+    """Return zone label overlay matrix for ``grid``.
+
+    If ``use_morphology`` is True, skeleton-based zones are merged with the
+    fixed zone layout.
+    """
+
     zones = segment_fixed_zones(grid)
-    return assign_zone_labels(grid, zones)
+    overlay = assign_zone_labels(grid, zones)
+    if use_morphology:
+        morph = compute_skeleton_overlay(grid)
+        overlay = merge_overlays(overlay, morph)
+    return overlay
 
 
 def label_connected_regions(grid: Grid) -> List[List[Optional[int]]]:
@@ -144,11 +180,37 @@ def expand_zone_overlay(
     return expanded
 
 
+def compute_skeleton_overlay(grid: Grid) -> List[List[Optional[Symbol]]]:
+    """Return overlay highlighting skeleton cells for each color."""
+
+    zones = segment_morphological_regions(grid)
+    return assign_zone_labels(grid, zones)
+
+
+def merge_overlays(
+    base: List[List[Optional[Symbol]]],
+    other: List[List[Optional[Symbol]]],
+) -> List[List[Optional[Symbol]]]:
+    """Merge ``other`` into ``base`` preferring labels from ``other``."""
+
+    height = len(base)
+    width = len(base[0]) if height else 0
+    merged = [row[:] for row in base]
+    for r in range(height):
+        for c in range(width):
+            if other[r][c] is not None:
+                merged[r][c] = other[r][c]
+    return merged
+
+
 __all__ = [
     "segment_fixed_zones",
     "segment_connected_regions",
     "assign_zone_labels",
     "zone_overlay",
+    "segment_morphological_regions",
+    "compute_skeleton_overlay",
+    "merge_overlays",
     "label_connected_regions",
     "expand_zone_overlay",
 ]
