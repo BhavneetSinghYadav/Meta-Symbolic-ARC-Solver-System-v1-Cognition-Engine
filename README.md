@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-This repository contains a symbolic solver for the [Abstraction and Reasoning Corpus (ARC)](https://github.com/fchollet/ARC).  The solver infers a set of symbolic rules from provided training examples and applies them to unseen test grids.  The design emphasises interpretability: rules are represented as structured `SymbolicRule` objects and can be chained into `CompositeRule` programs.  Recent updates added composite rule scoring, failure logging and a safer conflict tracking mechanism.
+This repository contains a symbolic solver for the [Abstraction and Reasoning Corpus (ARC)](https://github.com/arcprize/ARC-AGI-2).  The solver infers a set of symbolic rules from provided training examples and applies them to unseen test grids.  The design emphasises interpretability: rules are represented as structured `SymbolicRule` objects and can be chained into `CompositeRule` programs.  Recent updates added composite rule scoring, failure logging and a safer conflict tracking mechanism.
 
 ## 2. System Architecture
 
