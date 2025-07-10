@@ -16,7 +16,7 @@ from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.executor.failure_logger import log_failure
 from arc_solver.src.symbolic.rule_language import CompositeRule
-from arc_solver.src.symbolic.vocabulary import SymbolicRule
+from arc_solver.src.symbolic.vocabulary import SymbolicRule, TransformationType
 
 
 # ---------------------------------------------------------------------------
@@ -62,6 +62,9 @@ def _unique_ops(rule: SymbolicRule | CompositeRule) -> int:
 
     if isinstance(rule, CompositeRule):
         return len({step.transformation.ttype for step in rule.steps}) or 1
+    if rule.transformation.ttype is TransformationType.COMPOSITE:
+        steps = rule.transformation.params.get("steps", [])
+        return len(set(steps)) or 1
     return 1
 
 
