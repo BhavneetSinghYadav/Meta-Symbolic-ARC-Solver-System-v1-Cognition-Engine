@@ -134,7 +134,12 @@ recovered = program_to_rules(program)
 When executing programs the simulator first filters out impossible rules with `validate_color_dependencies` and then applies each rule using `safe_apply_rule`. Composite chains are expanded and simulated step by step. Reflex and training constraints are enforced during `_safe_apply_rule`.
 
 ```python
-validated = validate_color_dependencies([comp], grid)
+validated = validate_color_dependencies(
+    [comp],
+    grid,
+    training_colors=get_color_set(target_grid),
+    lineage_tracker=ColorLineageTracker(grid),
+)
 result = safe_apply_rule(comp, grid)
 ```
 

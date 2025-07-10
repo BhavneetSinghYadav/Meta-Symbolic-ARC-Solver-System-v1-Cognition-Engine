@@ -2,12 +2,13 @@ from __future__ import annotations
 
 """Validation helpers for composite rule colour dependencies."""
 
-from typing import List, Set
+from typing import List, Set, Iterable
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import SymbolicRule, SymbolType
 from arc_solver.src.symbolic.rule_language import CompositeRule
 from .failure_logger import log_failure
+from arc_solver.simulator import ColorLineageTracker
 
 
 def simulate_step(rule_step: SymbolicRule | CompositeRule, grid: Grid) -> Grid:
@@ -31,20 +32,30 @@ def validate_color_dependencies(
     rule_chain: List[SymbolicRule | CompositeRule],
     input_grid: Grid,
     *,
+    training_colors: Iterable[int] | None = None,
     debug: bool = False,
     rule_id: str | None = None,
     task_id: str | None = None,
+    lineage_tracker: ColorLineageTracker | None = None,
 ) -> bool:
-    """Validate that ``rule_chain`` preserves all required colours.
+    """Validate that ``rule_chain`` preserves required colours.
 
-    The chain is simulated step by step and the colour set after each step is
-    recorded. Only the final colour set is compared against the colours required
-    by the chain's source symbols. Intermediate colour removals are allowed.
+    The chain is simulated step by step. Colours removed at intermediate stages
+    are tolerated as long as the final colour set contains all colours used in
+    the chain's sources. When ``training_colors`` is provided the chain is also
+    accepted if the final colour set exactly matches this set even when some
+    source colours disappear.  ``lineage_tracker`` can be supplied to record
+    per-step colour transitions for debugging.
     """
     working = Grid([row[:] for row in input_grid.data])
     color_lineage: List[Set[int]] = []
     intermediate_grids: List[List[List[int]]] = []
     required: Set[int] = set()
+    training_set = (
+        {int(c) for c in training_colors if int(c) != 0}
+        if training_colors is not None
+        else None
+    )
 
     for step in rule_chain:
         color_lineage.append(get_color_set(working))
@@ -62,13 +73,16 @@ def validate_color_dependencies(
                             required.add(val)
                     except ValueError:
                         pass
+            before = Grid([row[:] for row in working.data])
             working = simulate_step(st, working)
+            if lineage_tracker is not None:
+                lineage_tracker.observe_rule(st, before, working)
     color_lineage.append(get_color_set(working))
     intermediate_grids.append([row[:] for row in working.data])
 
     final_colors = color_lineage[-1]
     missing = {c for c in required if c not in final_colors}
-    if missing:
+    if missing and not (training_set is not None and final_colors == training_set):
         divergence = None
         for i in range(len(color_lineage) - 1):
             before = color_lineage[i]
