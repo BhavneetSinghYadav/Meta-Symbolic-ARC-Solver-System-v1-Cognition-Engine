@@ -23,3 +23,4 @@ def test_proxy_merges_zones():
     assert set(proxy.meta.get("output_zones", [])) == {"TopLeft", "BottomRight"}
     assert proxy.transformation.ttype is TransformationType.REPLACE
     assert proxy.meta.get("zone_chain") == [("TopLeft", "TopLeft"), ("BottomRight", "BottomRight")]
+    assert proxy.meta.get("zone_scope_chain") == [(["TopLeft"], ["TopLeft"]), (["BottomRight"], ["BottomRight"])]
