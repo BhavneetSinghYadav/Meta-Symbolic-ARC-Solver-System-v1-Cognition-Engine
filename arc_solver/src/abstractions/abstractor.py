@@ -27,6 +27,10 @@ from arc_solver.src.symbolic.vocabulary import (
 from arc_solver.src.symbolic.repeat_rule import generate_repeat_rules
 from arc_solver.src.configs.defaults import ENABLE_COMPOSITE_REPEAT
 from arc_solver.src.symbolic.zone_remap import zone_remap
+from arc_solver.src.symbolic.morphology_ops import dilate_zone, erode_zone
+from arc_solver.src.symbolic.draw_line import draw_line
+from arc_solver.src.symbolic.rotate_about_point import rotate_about_point
+from arc_solver.src.segment.segmenter import label_connected_regions
 
 # Optional toggles controlling abstraction behaviour
 ENABLE_FALLBACK_COMPOSITES = True
@@ -459,6 +463,133 @@ def _find_translation(input_grid: Grid, output_grid: Grid) -> Optional[Tuple[int
     return dx, dy
 
 
+def _detect_zone_morphology(
+    input_grid: Grid, output_grid: Grid
+) -> List[SymbolicRule]:
+    """Detect simple dilation or erosion of a connected region."""
+    if input_grid.shape() != output_grid.shape():
+        return []
+    overlay = label_connected_regions(input_grid)
+    zone_ids = {z for row in overlay for z in row if z is not None}
+    for zid in zone_ids:
+        try:
+            pred = dilate_zone(input_grid.to_list(), zid, overlay)
+            if Grid(pred if isinstance(pred, list) else pred.tolist()) == output_grid:
+                rule = SymbolicRule(
+                    transformation=Transformation(
+                        TransformationType.FUNCTIONAL,
+                        params={"op": "dilate_zone", "zone": str(zid)},
+                    ),
+                    source=[Symbol(SymbolType.REGION, "All")],
+                    target=[Symbol(SymbolType.REGION, "All")],
+                    nature=TransformationNature.SPATIAL,
+                )
+                rule.meta["derivation"] = {"heuristic_used": "dilate_zone"}
+                return [rule]
+        except Exception:
+            pass
+        try:
+            pred = erode_zone(input_grid.to_list(), zid, overlay)
+            if Grid(pred if isinstance(pred, list) else pred.tolist()) == output_grid:
+                rule = SymbolicRule(
+                    transformation=Transformation(
+                        TransformationType.FUNCTIONAL,
+                        params={"op": "erode_zone", "zone": str(zid)},
+                    ),
+                    source=[Symbol(SymbolType.REGION, "All")],
+                    target=[Symbol(SymbolType.REGION, "All")],
+                    nature=TransformationNature.SPATIAL,
+                )
+                rule.meta["derivation"] = {"heuristic_used": "erode_zone"}
+                return [rule]
+        except Exception:
+            pass
+    return []
+
+
+def _detect_draw_line(
+    input_grid: Grid, output_grid: Grid
+) -> List[SymbolicRule]:
+    """Detect drawing a straight line connecting two existing cells."""
+    if input_grid.shape() != output_grid.shape():
+        return []
+    h, w = input_grid.shape()
+    diff = [
+        (r, c)
+        for r in range(h)
+        for c in range(w)
+        if input_grid.get(r, c) != output_grid.get(r, c)
+    ]
+    if not diff:
+        return []
+    color = output_grid.get(diff[0][0], diff[0][1])
+    if any(output_grid.get(r, c) != color for r, c in diff):
+        return []
+    points = [
+        (r, c)
+        for r in range(h)
+        for c in range(w)
+        if input_grid.get(r, c) != 0
+    ]
+    for i, p1 in enumerate(points):
+        for p2 in points[i + 1 :]:
+            try:
+                pred = draw_line(input_grid.to_list(), p1, p2, color)
+            except Exception:
+                continue
+            if Grid(pred if isinstance(pred, list) else pred.tolist()) == output_grid:
+                rule = SymbolicRule(
+                    transformation=Transformation(
+                        TransformationType.FUNCTIONAL,
+                        params={"op": "draw_line", "p1": str(p1), "p2": str(p2), "color": str(color)},
+                    ),
+                    source=[Symbol(SymbolType.REGION, "All")],
+                    target=[Symbol(SymbolType.REGION, "All")],
+                    nature=TransformationNature.SPATIAL,
+                )
+                rule.meta["derivation"] = {"heuristic_used": "draw_line"}
+                return [rule]
+    return []
+
+
+def _detect_rotate_patch(
+    input_grid: Grid, output_grid: Grid
+) -> List[SymbolicRule]:
+    """Detect small rotation around a pivot."""
+    if input_grid.shape() != output_grid.shape():
+        return []
+    h, w = input_grid.shape()
+    diff = [(r, c) for r in range(h) for c in range(w) if input_grid.get(r, c) != output_grid.get(r, c)]
+    if not diff or len(diff) > 12:
+        return []
+    min_r = min(r for r, _ in diff)
+    max_r = max(r for r, _ in diff)
+    min_c = min(c for _, c in diff)
+    max_c = max(c for _, c in diff)
+    if max_r - min_r > 3 or max_c - min_c > 3:
+        return []
+    for cx in range(min_r, max_r + 1):
+        for cy in range(min_c, max_c + 1):
+            for angle in (90, 180, 270):
+                try:
+                    pred = rotate_about_point(input_grid, (cx, cy), angle)
+                except Exception:
+                    continue
+                if pred == output_grid:
+                    rule = SymbolicRule(
+                        transformation=Transformation(
+                            TransformationType.ROTATE,
+                            params={"cx": str(cx), "cy": str(cy), "angle": str(angle)},
+                        ),
+                        source=[Symbol(SymbolType.REGION, "All")],
+                        target=[Symbol(SymbolType.REGION, "All")],
+                        nature=TransformationNature.SPATIAL,
+                    )
+                    rule.meta["derivation"] = {"heuristic_used": "rotate_about_point"}
+                    return [rule]
+    return []
+
+
 def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[SymbolicRule]:
     """Return shape abstraction, translation or rotation rules."""
 
@@ -480,6 +611,18 @@ def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[Symbo
         rule.meta["derivation"] = {"heuristic_used": "translation"}
         rules.append(rule)
         return rules
+
+    morph = _detect_zone_morphology(input_grid, output_grid)
+    if morph:
+        return morph
+
+    line_rule = _detect_draw_line(input_grid, output_grid)
+    if line_rule:
+        return line_rule
+
+    rot_rule = _detect_rotate_patch(input_grid, output_grid)
+    if rot_rule:
+        return rot_rule
 
     # shape abstraction / rotation heuristics
     if input_grid.shape() == output_grid.shape():
