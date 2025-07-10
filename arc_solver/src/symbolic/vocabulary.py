@@ -4,7 +4,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Callable
+
+# Import extended symbolic operators
+try:  # mirror_tile used to live in operators.py in older versions
+    from .mirror_tile import mirror_tile
+except Exception:  # pragma: no cover - fallback for legacy layout
+    from .operators import mirror_tile
+
+try:
+    from .pattern_fill_operator import pattern_fill
+except Exception:  # pragma: no cover - handle absent optional module
+    pattern_fill = None  # type: ignore
+
+try:
+    from .draw_line import draw_line  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    draw_line = None  # type: ignore
+
+try:
+    from .morphology_ops import dilate_zone, erode_zone  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    dilate_zone = erode_zone = None  # type: ignore
+
+try:
+    from .rotate_about_point import rotate_about_point
+except Exception:  # pragma: no cover - optional dependency
+    rotate_about_point = None  # type: ignore
 
 MAX_COLOR = 10
 
@@ -189,4 +215,108 @@ __all__ = [
     "validate_color_range",
     "MAX_COLOR",
     "is_valid_symbol",
+    "get_extended_operators",
 ]
+
+
+# === EXTENDED_OPERATORS ===
+EXTENDED_OPERATORS: Dict[str, Dict[str, Any]] = {
+    # Functional operator: mirror the grid while tiling
+    "mirror_tile": {
+        "factory": mirror_tile,
+        "rule": lambda axis, repeats: SymbolicRule(
+            transformation=Transformation(
+                TransformationType.FUNCTIONAL,
+                params={"op": "mirror_tile", "axis": str(axis), "repeats": str(int(repeats))},
+            ),
+            source=[Symbol(SymbolType.REGION, "All")],
+            target=[Symbol(SymbolType.REGION, "All")],
+            nature=TransformationNature.SPATIAL,
+        ),
+        "desc": "Tile the grid along an axis mirroring every alternate copy.",
+    },
+    # Fill regions of a grid using a repeating pattern mask
+    "pattern_fill": {
+        "factory": pattern_fill,
+        "rule": lambda mask, pattern: SymbolicRule(
+            transformation=Transformation(
+                TransformationType.FUNCTIONAL,
+                params={"op": "pattern_fill"},
+            ),
+            source=[Symbol(SymbolType.REGION, "All")],
+            target=[Symbol(SymbolType.REGION, "All")],
+            nature=TransformationNature.SPATIAL,
+            meta={"mask": mask, "pattern": pattern},
+        ),
+        "desc": "Fill masked cells with a tiled pattern.",
+    },
+    # Draw a straight line between two points of a specific colour
+    "draw_line": {
+        "factory": draw_line,
+        "rule": lambda p1, p2, color: SymbolicRule(
+            transformation=Transformation(
+                TransformationType.FUNCTIONAL,
+                params={
+                    "op": "draw_line",
+                    "p1": str(p1),
+                    "p2": str(p2),
+                    "color": str(color),
+                },
+            ),
+            source=[Symbol(SymbolType.REGION, "All")],
+            target=[Symbol(SymbolType.REGION, "All")],
+            nature=TransformationNature.SPATIAL,
+        ),
+        "desc": "Draw a coloured line segment between two coordinates.",
+    },
+    # Morphological dilate operation on labelled zone
+    "dilate_zone": {
+        "factory": dilate_zone,
+        "rule": lambda zone_id: SymbolicRule(
+            transformation=Transformation(
+                TransformationType.FUNCTIONAL,
+                params={"op": "dilate_zone", "zone": str(zone_id)},
+            ),
+            source=[Symbol(SymbolType.ZONE, str(zone_id))],
+            target=[Symbol(SymbolType.ZONE, str(zone_id))],
+            nature=TransformationNature.SPATIAL,
+        ),
+        "desc": "Dilate a segmented zone by one cell.",
+    },
+    # Morphological erode operation on labelled zone
+    "erode_zone": {
+        "factory": erode_zone,
+        "rule": lambda zone_id: SymbolicRule(
+            transformation=Transformation(
+                TransformationType.FUNCTIONAL,
+                params={"op": "erode_zone", "zone": str(zone_id)},
+            ),
+            source=[Symbol(SymbolType.ZONE, str(zone_id))],
+            target=[Symbol(SymbolType.ZONE, str(zone_id))],
+            nature=TransformationNature.SPATIAL,
+        ),
+        "desc": "Erode a segmented zone by one cell.",
+    },
+    # Rotate grid by multiples of 90 degrees around a point
+    "rotate_about_point": {
+        "factory": rotate_about_point,
+        "rule": lambda center, angle: SymbolicRule(
+            transformation=Transformation(
+                TransformationType.ROTATE,
+                params={"cx": str(center[0]), "cy": str(center[1]), "angle": str(int(angle))},
+            ),
+            source=[Symbol(SymbolType.REGION, "All")],
+            target=[Symbol(SymbolType.REGION, "All")],
+            nature=TransformationNature.SPATIAL,
+        ),
+        "desc": "Rotate the grid around a pivot point.",
+    },
+    # Placeholder for future operators
+}
+
+
+def get_extended_operators() -> Dict[str, Dict[str, Any]]:
+    """Return registry of extended symbolic operators."""
+
+    return EXTENDED_OPERATORS
+
