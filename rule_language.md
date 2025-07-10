@@ -27,13 +27,19 @@ class TransformationType(Enum):
     MERGE = "MERGE"
     FILTER = "FILTER"
     ROTATE = "ROTATE"
+    ROTATE90 = "ROTATE90"
     REFLECT = "REFLECT"
     REPEAT = "REPEAT"
+    SHAPE_ABSTRACT = "SHAPE_ABSTRACT"
     CONDITIONAL = "CONDITIONAL"
     REGION = "REGION"
     FUNCTIONAL = "FUNCTIONAL"
     COMPOSITE = "COMPOSITE"
 ```
+
+`ROTATE90` rotates the entire grid clockwise in 90° steps. `SHAPE_ABSTRACT`
+captures shape equivalence without changing grid colours. These additions widen
+the DSL beyond simple colour manipulation.
 
 Each `Symbol` couples a type with a value and performs basic validity checks:
 

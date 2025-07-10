@@ -455,23 +455,60 @@ def _find_translation(input_grid: Grid, output_grid: Grid) -> Optional[Tuple[int
 
 
 def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[SymbolicRule]:
-    """Return translation rules when the entire grid is shifted."""
-    offset = _find_translation(input_grid, output_grid)
-    if offset is None:
-        return []
+    """Return shape abstraction, translation or rotation rules."""
 
-    dx, dy = offset
-    rule = SymbolicRule(
-        transformation=Transformation(
-            TransformationType.TRANSLATE,
-            params={"dx": str(dx), "dy": str(dy)},
-        ),
-        source=[Symbol(SymbolType.REGION, "All")],
-        target=[Symbol(SymbolType.REGION, "All")],
-        nature=TransformationNature.SPATIAL,
-    )
-    rule.meta["derivation"] = {"heuristic_used": "translation"}
-    return [rule]
+    rules: List[SymbolicRule] = []
+
+    # translation detection
+    offset = _find_translation(input_grid, output_grid)
+    if offset is not None:
+        dx, dy = offset
+        rule = SymbolicRule(
+            transformation=Transformation(
+                TransformationType.TRANSLATE,
+                params={"dx": str(dx), "dy": str(dy)},
+            ),
+            source=[Symbol(SymbolType.REGION, "All")],
+            target=[Symbol(SymbolType.REGION, "All")],
+            nature=TransformationNature.SPATIAL,
+        )
+        rule.meta["derivation"] = {"heuristic_used": "translation"}
+        rules.append(rule)
+        return rules
+
+    # shape abstraction / rotation heuristics
+    if input_grid.shape() == output_grid.shape():
+        h, w = input_grid.shape()
+        in_shape = [[1 if input_grid.get(r, c) != 0 else 0 for c in range(w)] for r in range(h)]
+        out_shape = [[1 if output_grid.get(r, c) != 0 else 0 for c in range(w)] for r in range(h)]
+
+        if in_shape == out_shape:
+            rule = SymbolicRule(
+                transformation=Transformation(TransformationType.SHAPE_ABSTRACT),
+                source=[Symbol(SymbolType.SHAPE, "Any")],
+                target=[Symbol(SymbolType.SHAPE, "Any")],
+                nature=TransformationNature.LOGICAL,
+            )
+            rule.meta["derivation"] = {"heuristic_used": "shape"}
+            rules.append(rule)
+            return rules
+
+        for t in range(1, 4):
+            if Grid(in_shape).rotate90(t).data == out_shape:
+                rule = SymbolicRule(
+                    transformation=Transformation(
+                        TransformationType.ROTATE90,
+                        params={"times": str(t)},
+                    ),
+                    source=[Symbol(SymbolType.SHAPE, "Any")],
+                    target=[Symbol(SymbolType.SHAPE, "Any")],
+                    nature=TransformationNature.SPATIAL,
+                )
+                rule.meta["derivation"] = {"heuristic_used": "rotation"}
+                rules.append(rule)
+                return rules
+
+    return rules
 
 
 def split_rule_by_overlay(
