@@ -3,11 +3,10 @@ from __future__ import annotations
 """Rule scoring and strategy utilities for the executor.
 
 This module evaluates symbolic rules by comparing their predictions against
-expected grids.  The previous scoring heavily penalised long composite programs
-based on their structural cost which resulted in perfect multi-step solutions
-being discarded.  The scoring logic has been simplified so that only the number
-of *unique* transformation types contributes to the complexity penalty.  A
-small bonus is granted to perfect composites to encourage valid chains.
+expected grids.  Older revisions heavily penalised long composite programs
+using raw structural cost.  The new logic reduces this bias by weighting the
+penalty per unique transformation type.  A small bonus is still granted to
+perfect composites to encourage valid chains.
 """
 
 from typing import Dict, List, Tuple
@@ -31,6 +30,23 @@ STRATEGY_REGISTRY: Dict[Tuple[str, ...], List[str]] = {
 }
 
 SCORE_FAILURE_THRESHOLD = 0.2
+
+# Relative weights for each transformation type when computing structural cost.
+OP_WEIGHTS: Dict[TransformationType, float] = {
+    TransformationType.REPLACE: 1.0,
+    TransformationType.TRANSLATE: 1.0,
+    TransformationType.MERGE: 1.1,
+    TransformationType.FILTER: 1.0,
+    TransformationType.ROTATE: 1.2,
+    TransformationType.ROTATE90: 1.2,
+    TransformationType.REFLECT: 1.1,
+    TransformationType.REPEAT: 1.3,
+    TransformationType.SHAPE_ABSTRACT: 1.3,
+    TransformationType.CONDITIONAL: 1.2,
+    TransformationType.REGION: 1.1,
+    TransformationType.FUNCTIONAL: 1.3,
+    TransformationType.COMPOSITE: 1.0,
+}
 
 
 def _shape_delta(input_grid: Grid, output_grid: Grid) -> str:
@@ -66,6 +82,23 @@ def _unique_ops(rule: SymbolicRule | CompositeRule) -> int:
         steps = rule.transformation.params.get("steps", [])
         return len(set(steps)) or 1
     return 1
+
+
+def _op_cost(rule: SymbolicRule | CompositeRule) -> float:
+    """Return weighted cost of unique operations used by ``rule``."""
+
+    if isinstance(rule, CompositeRule):
+        ops = {step.transformation.ttype for step in rule.steps}
+    elif rule.transformation.ttype is TransformationType.COMPOSITE:
+        step_names = rule.transformation.params.get("steps", [])
+        ops = {TransformationType[s] if isinstance(s, str) else s for s in step_names}
+    else:
+        ops = {rule.transformation.ttype}
+
+    if not ops:
+        return 0.0
+
+    return float(sum(OP_WEIGHTS.get(op, 1.0) for op in ops))
 
 
 def score_rule(
@@ -104,8 +137,8 @@ def score_rule(
     if improvement > 0:
         base += 0.25 * improvement
 
-    # Complexity penalty based on unique operation types
-    penalty = 0.006 * _unique_ops(rule)
+    # Complexity penalty weighted by unique operation types
+    penalty = 0.006 * _op_cost(rule)
 
     # Composite bonus only when the rule perfectly matches the output
     bonus = 0.2 if isinstance(rule, CompositeRule) and base >= 0.95 else 0.0
@@ -115,6 +148,7 @@ def score_rule(
     trace = {
         "similarity": float(base),
         "unique_ops": int(_unique_ops(rule)),
+        "op_cost": float(_op_cost(rule)),
         "penalty": float(penalty),
         "bonus": float(bonus),
         "final_score": float(final),
@@ -145,6 +179,7 @@ def score_rule(
     if details:
         return {
             "similarity": float(base),
+            "op_cost": float(_op_cost(rule)),
             "penalty": float(penalty),
             "bonus": float(bonus),
             "final_score": float(final),
