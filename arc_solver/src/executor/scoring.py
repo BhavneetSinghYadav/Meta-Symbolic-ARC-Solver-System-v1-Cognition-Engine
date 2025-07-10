@@ -9,7 +9,7 @@ penalty per unique transformation type.  A small bonus is still granted to
 perfect composites to encourage valid chains.
 """
 
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
@@ -30,6 +30,9 @@ STRATEGY_REGISTRY: Dict[Tuple[str, ...], List[str]] = {
 }
 
 SCORE_FAILURE_THRESHOLD = 0.2
+
+# Toggle integration of zone-aware heuristics during rule scoring
+ENABLE_ZONE_SCORING = False
 
 # Relative weights for each transformation type when computing structural cost.
 OP_WEIGHTS: Dict[TransformationType, float] = {
@@ -101,6 +104,34 @@ def _op_cost(rule: SymbolicRule | CompositeRule) -> float:
     return float(sum(OP_WEIGHTS.get(op, 1.0) for op in ops))
 
 
+def _extract_zones(rule: SymbolicRule | CompositeRule) -> List[str]:
+    """Return sorted unique zones referenced by ``rule``."""
+
+    zones: set[str] = set()
+
+    def _gather(meta: Dict[str, Any] | None) -> None:
+        if not meta:
+            return
+        for key in ("zone", "input_zones", "output_zones"):
+            val = meta.get(key)
+            if not val:
+                continue
+            if isinstance(val, str):
+                zones.add(val)
+            else:
+                zones.update(val)
+
+    if isinstance(rule, CompositeRule):
+        for step in rule.steps:
+            _gather(getattr(step, "condition", None) or {})
+            _gather(getattr(step, "meta", None) or {})
+    else:
+        _gather(getattr(rule, "condition", None) or {})
+        _gather(getattr(rule, "meta", None) or {})
+
+    return sorted(zones)
+
+
 def score_rule(
     input_grid: Grid,
     output_grid: Grid,
@@ -145,6 +176,19 @@ def score_rule(
 
     final = base - penalty + bonus
 
+    # === Zone-Aware Scoring Hooks  ===
+    if ENABLE_ZONE_SCORING:
+        from arc_solver.src.scoring.zone_adjustments import (
+            zone_alignment_bonus,
+            zone_coverage_weight,
+            zone_entropy_penalty,
+        )
+        zones = _extract_zones(rule)
+        z_pen = zone_entropy_penalty(input_grid, zones)
+        z_bonus = zone_alignment_bonus(pred, output_grid, zones)
+        z_weight = zone_coverage_weight(pred, zones)
+        final = (final - z_pen + z_bonus) * z_weight
+
     trace = {
         "similarity": float(base),
         "unique_ops": int(_unique_ops(rule)),
@@ -158,6 +202,11 @@ def score_rule(
         if isinstance(rule, CompositeRule)
         else [rule.transformation.ttype.value],
     }
+
+    if ENABLE_ZONE_SCORING:
+        trace["zone_entropy_penalty"] = float(z_pen)
+        trace["zone_alignment_bonus"] = float(z_bonus)
+        trace["zone_coverage_weight"] = float(z_weight)
 
     if final < SCORE_FAILURE_THRESHOLD:
         log_failure(
