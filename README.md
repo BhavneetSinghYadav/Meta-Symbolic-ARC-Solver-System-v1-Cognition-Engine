@@ -60,7 +60,7 @@ python instrument.py --bundle arc-agi_training_challenges.json --task_id 0000000
 ## 6. Output & Logging
 
 Predicted grids for datasets are written to `submission.json`.  When `solve_task` runs with `debug=True` a detailed log file is created under `logs/` describing extracted rules, conflicts and scoring statistics.  Failures below a score threshold are appended to `logs/failure_log.jsonl` as JSON lines containing `intermediate_grids`, `color_lineage`, `rejection_stage` and, when score tracing is enabled, a `score_trace` breakdown.
-Fallback predictions are now skipped when a candidate rule exactly matches the target (`similarity==1.0`).  If such a rule exists but cannot be executed the fallback entry is tagged with `reason: high_cost_valid_rule` in the log.
+Fallback predictions are now skipped when a candidate rule exactly matches the target (`similarity==1.0`).  If such a rule exists but cannot be executed the fallback entry is tagged with `reason: high_cost_valid_rule` in the log.  When invoked the fallback predictor first applies the most common rotation or mirror operation observed in the training set before padding the grid with the dominant colour.  If composite rules fail outright the solver falls back to a simpler rule pipeline instead of immediately padding.
 
 ## 7. Example Tasks & Visualizations
 

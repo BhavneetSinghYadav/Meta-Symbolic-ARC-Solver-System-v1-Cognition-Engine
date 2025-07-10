@@ -319,7 +319,26 @@ def solve_task(
                     pass
             return rescue_preds, test_outputs, [], [rescue_rule]
         if logger:
-            logger.warning("no candidate rules; using fallback predictor")
+            logger.warning("no candidate rules; attempting simple rule pipeline")
+        try:
+            from arc_solver.src.scoring import run_pipeline
+            simple_rules, _ = run_pipeline(train_pairs)
+        except Exception:
+            simple_rules = []
+
+        if simple_rules:
+            preds = []
+            for g in test_inputs:
+                try:
+                    preds.append(simulate_rules(g, simple_rules, logger=logger))
+                except Exception:
+                    preds.append(_fallback(g))
+            if logger:
+                logger.info("used simple rule pipeline fallback")
+            return preds, test_outputs, [], simple_rules
+
+        if logger:
+            logger.warning("simple rule pipeline failed; using fallback predictor")
         if perfect_rule and task_id:
             try:
                 entry = {
