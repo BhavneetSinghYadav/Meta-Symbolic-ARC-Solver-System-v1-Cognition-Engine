@@ -47,7 +47,10 @@ OP_WEIGHTS: Dict[TransformationType, float] = {
     TransformationType.SHAPE_ABSTRACT: 1.3,
     TransformationType.CONDITIONAL: 1.2,
     TransformationType.REGION: 1.1,
-    TransformationType.FUNCTIONAL: 1.3,
+    # Slightly penalise heavy functional operators such as pattern_fill or
+    # morphology-based zone expansion.  These tend to produce large diffs and
+    # should have a higher cost than basic logical transformations.
+    TransformationType.FUNCTIONAL: 1.4,
     TransformationType.COMPOSITE: 1.0,
 }
 

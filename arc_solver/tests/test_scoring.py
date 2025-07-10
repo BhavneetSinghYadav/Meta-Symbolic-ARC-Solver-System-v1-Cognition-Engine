@@ -90,3 +90,17 @@ def test_grid_color_entropy_intermediate():
     mixed = Grid([[1, 1, 1], [1, 1, 2]])
     ent = grid_color_entropy(mixed)
     assert 0.0 < ent < 1.0
+
+
+def test_functional_weight_penalty():
+    """_op_cost should reflect the increased weight for FUNCTIONAL ops."""
+    rule = SymbolicRule(
+        transformation=Transformation(
+            TransformationType.FUNCTIONAL, params={"op": "pattern_fill"}
+        ),
+        source=[Symbol(SymbolType.REGION, "All")],
+        target=[Symbol(SymbolType.REGION, "All")],
+    )
+    from arc_solver.src.executor.scoring import _op_cost
+
+    assert _op_cost(rule) == pytest.approx(1.4, rel=1e-6)
