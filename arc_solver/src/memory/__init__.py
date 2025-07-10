@@ -2,7 +2,7 @@
 
 from .policy_cache import PolicyCache
 from .lineage import LineageTracker, RuleLineageTracker
-from .rule_memory import RuleMemory
+from .rule_memory import RuleMemory, RULE_MEMORY
 
 try:  # Optional import; memory_store depends on heavy packages like sklearn
     from .memory_store import (
@@ -32,6 +32,7 @@ __all__ = [
     "LineageTracker",
     "RuleLineageTracker",
     "RuleMemory",
+    "RULE_MEMORY",
     "save_rule_program",
     "load_memory",
     "retrieve_similar_signatures",
