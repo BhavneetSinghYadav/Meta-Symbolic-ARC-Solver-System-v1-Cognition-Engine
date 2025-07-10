@@ -41,7 +41,10 @@ from arc_solver.src.utils.grid_utils import validate_grid
 from arc_solver.src.symbolic.operators import mirror_tile
 from arc_solver.src.symbolic.pattern_fill_operator import pattern_fill
 from arc_solver.src.symbolic.draw_line import draw_line
-from arc_solver.src.symbolic.morphology_ops import dilate_zone, erode_zone
+try:
+    from arc_solver.src.symbolic.morphology_ops import dilate_zone, erode_zone
+except Exception:  # pragma: no cover - optional dependency
+    dilate_zone = erode_zone = None  # type: ignore
 from arc_solver.src.symbolic.rotate_about_point import rotate_about_point
 
 
