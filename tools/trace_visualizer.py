@@ -3,6 +3,15 @@
 This utility loads a JSON lines trace file produced when score tracing is
 enabled and renders a diagnostic figure with prediction overlays and rule
 breakdowns.  It is primarily meant to help debugging failed rules.
+
+Usage once installed with ``pip``:
+
+```
+trace_visualizer --task_id 00000001 \
+                 --trace_file logs/trace.jsonl \
+                 --task_file arc-agi_training_challenges.json \
+                 --solution_file arc-agi_training_solutions.json
+```
 """
 
 from __future__ import annotations
