@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from typing import Dict, List, Set, Union
+from typing import Dict, List, Set, Tuple, Union
 
 from arc_solver.src.symbolic.vocabulary import (
     SymbolType,
@@ -67,28 +67,48 @@ def sort_rules_by_dependency(rules: List[SymbolicRule | CompositeRule]) -> List[
 
 
 def sort_rules_by_topology(rules: List[SymbolicRule | CompositeRule]) -> List[SymbolicRule | CompositeRule]:
-    """Return ``rules`` ordered respecting zone and color dependencies."""
+    """Return ``rules`` ordered respecting zone transition dependencies."""
 
-    zone_groups: Dict[str | None, List[SymbolicRule | CompositeRule]] = defaultdict(list)
-
+    chains: List[List[Tuple[str | None, str | None]]] = []
     for rule in rules:
-        zone: str | None = None
         if isinstance(rule, CompositeRule):
-            zones = {
-                step.condition.get("zone")
-                for step in rule.steps
-                if step.condition and "zone" in step.condition
-            }
-            if len(zones) == 1:
-                zone = next(iter(zones))
+            proxy = rule.as_symbolic_proxy()
+            chains.append(proxy.meta.get("zone_chain", []))
         else:
             zone = rule.condition.get("zone") if rule.condition else None
-        zone_groups[zone].append(rule)
+            chains.append([(zone, zone)])
 
-    ordered: List[SymbolicRule | CompositeRule] = []
-    for key in sorted(zone_groups.keys(), key=lambda z: "" if z is None else str(z)):
-        ordered.extend(sort_rules_by_dependency(zone_groups[key]))
-    return ordered
+    graph = rule_dependency_graph(rules)
+
+    for i, c1 in enumerate(chains):
+        if not c1:
+            continue
+        out_zone = c1[-1][1]
+        if not out_zone:
+            continue
+        for j, c2 in enumerate(chains):
+            if i == j or not c2:
+                continue
+            in_zone = c2[0][0]
+            if in_zone and in_zone == out_zone:
+                graph.setdefault(i, set()).add(j)
+
+    indegree: Dict[int, int] = {i: 0 for i in range(len(rules))}
+    for deps in graph.values():
+        for j in deps:
+            indegree[j] += 1
+    queue = deque([i for i, d in indegree.items() if d == 0])
+    order: List[int] = []
+    while queue:
+        i = queue.popleft()
+        order.append(i)
+        for j in graph.get(i, set()):
+            indegree[j] -= 1
+            if indegree[j] == 0:
+                queue.append(j)
+
+    order.extend(i for i in range(len(rules)) if i not in order)
+    return [rules[i] for i in order]
 
 
 def _extract_color(rule: SymbolicRule) -> str | None:
