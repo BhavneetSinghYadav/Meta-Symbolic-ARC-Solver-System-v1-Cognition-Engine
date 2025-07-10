@@ -2,21 +2,19 @@ from __future__ import annotations
 
 """Rule scoring and strategy utilities for the executor.
 
-The scoring balances the similarity of a rule's output with the target
-against a cost-based complexity penalty.  The penalty multiplier has been
-softened so that even multi-step composite rules receive a reasonable score.
-When ``prefer_composites`` is enabled the complexity cost is further scaled by
-``1 / sqrt(steps)`` of the composite, reducing the bias against longer rule
-chains.
+This module evaluates symbolic rules by comparing their predictions against
+expected grids.  The previous scoring heavily penalised long composite programs
+based on their structural cost which resulted in perfect multi-step solutions
+being discarded.  The scoring logic has been simplified so that only the number
+of *unique* transformation types contributes to the complexity penalty.  A
+small bonus is granted to perfect composites to encourage valid chains.
 """
 
 from typing import Dict, List, Tuple
-import math
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.symbolic.rule_language import CompositeRule
-from .score_components import structural_cost, composite_bonus
 from arc_solver.src.symbolic.vocabulary import SymbolicRule
 
 
@@ -56,26 +54,32 @@ def preferred_rule_types(input_grid: Grid, output_grid: Grid) -> List[str]:
 # ---------------------------------------------------------------------------
 
 
+def _unique_ops(rule: SymbolicRule | CompositeRule) -> int:
+    """Return count of unique transformation types used by ``rule``."""
+
+    if isinstance(rule, CompositeRule):
+        return len({step.transformation.ttype for step in rule.steps}) or 1
+    return 1
+
+
 def score_rule(
     input_grid: Grid,
     output_grid: Grid,
     rule: SymbolicRule | CompositeRule,
     *,
     prefer_composites: bool = False,
-) -> float:
+    details: bool = False,
+) -> float | Dict[str, float]:
     """Return heuristic score of ``rule`` for transforming ``input_grid`` to ``output_grid``.
 
-    ``prefer_composites`` can be toggled to soften complexity penalties for multi step
-    rules when experimenting with ranking strategies.
+    When ``details`` is ``True`` a dictionary containing individual score
+    components is returned instead of just the final score.  The
+    ``prefer_composites`` flag is kept for compatibility but no longer affects
+    scoring.
     """
 
     try:
-        if isinstance(rule, CompositeRule):
-            pred = rule.simulate(input_grid)
-            steps = len(rule.steps)
-        else:
-            pred = simulate_rules(input_grid, [rule])
-            steps = 1
+        pred = rule.simulate(input_grid) if isinstance(rule, CompositeRule) else simulate_rules(input_grid, [rule])
     except Exception:
         return 0.0
 
@@ -93,20 +97,22 @@ def score_rule(
     if improvement > 0:
         base += 0.2 * improvement
 
-    # Penalize complex rules using structural cost
-    complexity = structural_cost(rule)
-    penalty = 0.02 * complexity
-    if isinstance(rule, CompositeRule) and prefer_composites:
-        penalty /= math.sqrt(len(rule.steps))
+    # Complexity penalty based on unique operation types
+    penalty = 0.005 * _unique_ops(rule)
 
-    bonus = 0.0
-    if isinstance(rule, CompositeRule):
-        bonus = composite_bonus(rule, input_grid, output_grid)
-    final = base + bonus - penalty
-    if final < 0.0:
-        final = 0.0
-    if final > 1.0:
-        final = 1.0
+    # Composite bonus only when the rule perfectly matches the output
+    bonus = 0.2 if isinstance(rule, CompositeRule) and base == 1.0 else 0.0
+
+    final = base - penalty + bonus
+
+    if details:
+        return {
+            "similarity": float(base),
+            "penalty": float(penalty),
+            "bonus": float(bonus),
+            "final_score": float(final),
+        }
+
     return final
 
 
