@@ -1,6 +1,6 @@
 # Meta-Symbolic ARC Solver System
 
-![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/BhavneetSinghYadav/REPO/actions/workflows/ci.yml/badge.svg)
 
 ## 1. Project Overview
 
