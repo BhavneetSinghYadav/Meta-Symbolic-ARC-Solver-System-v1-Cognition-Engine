@@ -14,6 +14,9 @@ from arc_solver.simulator import (
     summarize_skips_by_type,
     ColorLineageTracker,
 )
+from arc_solver.src.executor.color_lineage import ColorLineage
+from arc_solver.src.executor.failure_logger import log_failure
+from arc_solver.src.executor.sim_defer_gate import allow_pruning
 from arc_solver.src.symbolic.vocabulary import validate_color_range, MAX_COLOR
 from arc_solver.src.symbolic.rule_language import CompositeRule
 from arc_solver.src.utils import config_loader
@@ -190,6 +193,7 @@ def validate_color_dependencies(
     logger: logging.Logger | None = None,
     strict: bool = False,
     lineage_tracker: ColorLineageTracker | None = None,
+    step_state: "ColorLineage" | None = None,
 ) -> List[SymbolicRule | CompositeRule]:
     """Return ``rules`` filtered by available colors.
 
@@ -203,12 +207,24 @@ def validate_color_dependencies(
     color_presence = {v for row in working.data for v in row}
     lineage: dict[int, str] = {}
     valid: list[SymbolicRule | CompositeRule] = []
+    if step_state is None:
+        step_state = ColorLineage(working)
 
     for rule in rules:
         if isinstance(rule, CompositeRule):
+            preview = Grid([row[:] for row in working.data])
+            try:
+                for st in rule.steps:
+                    preview = safe_apply_rule(st, preview, perform_checks=False)
+                final_presence = {v for row in preview.data for v in row}
+            except Exception:
+                final_presence = {v for row in working.data for v in row}
+
             step_grid = Grid([row[:] for row in working.data])
             step_presence = {v for row in step_grid.data for v in row}
             valid_chain = True
+            if step_state:
+                step_state.record(step_grid)
             for idx, step in enumerate(rule.steps):
                 try:
                     required = {
@@ -244,10 +260,21 @@ def validate_color_dependencies(
                                 logger.warning(
                                     f"Rule '{rule}' skipped – source color {c} no longer present{info}"
                                 )
-                    if strict:
-                        raise ValueError(f"Missing colors for rule: {rule}")
-                    valid_chain = False
-                    break
+                    if final_presence.issuperset(missing):
+                        pass
+                    else:
+                        log_failure(
+                            {
+                                "rule": str(rule),
+                                "reason": "missing_color",
+                                "missing": missing,
+                                "snapshot": step_grid.data,
+                            }
+                        )
+                        if strict:
+                            raise ValueError(f"Missing colors for rule: {rule}")
+                        valid_chain = False
+                        break
 
                 before_step = {v for row in step_grid.data for v in row}
                 if logger:
@@ -267,6 +294,8 @@ def validate_color_dependencies(
                         step_grid.data,
                     )
                 step_presence = {v for row in step_grid.data for v in row}
+                if step_state:
+                    step_state.record(step_grid)
 
             if not valid_chain:
                 continue
@@ -305,6 +334,14 @@ def validate_color_dependencies(
                             logger.warning(
                                 f"Rule '{rule}' skipped – source color {c} no longer present{info}"
                             )
+                log_failure(
+                    {
+                        "rule": str(rule),
+                        "reason": "missing_color",
+                        "missing": missing,
+                        "snapshot": working.data,
+                    }
+                )
                 if strict:
                     raise ValueError(f"Missing colors for rule: {rule}")
                 continue
@@ -316,6 +353,8 @@ def validate_color_dependencies(
             except Exception:
                 pass
             after = {v for row in working.data for v in row}
+            if step_state:
+                step_state.record(working)
 
         removed = before - after
         for col in removed:
@@ -822,7 +861,7 @@ def simulate_rules(
     write_vals: dict[tuple[int, int], list[int]] = defaultdict(list)
 
     for idx, (rule, pre_cov) in enumerate(coverage_pairs):
-        if pre_cov == 0:
+        if pre_cov == 0 and allow_pruning(rule):
             if logger:
                 logger.warning(f"Skipping rule due to invalid context: {rule}")
             continue

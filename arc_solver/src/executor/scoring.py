@@ -16,6 +16,7 @@ import math
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.symbolic.rule_language import CompositeRule
+from .score_components import structural_cost, composite_bonus
 from arc_solver.src.symbolic.vocabulary import SymbolicRule
 
 
@@ -92,15 +93,16 @@ def score_rule(
     if improvement > 0:
         base += 0.2 * improvement
 
-    # Penalize complex rules (softer for composites)
-    from arc_solver.src.abstractions.rule_generator import rule_cost
-    complexity = rule_cost(rule)
+    # Penalize complex rules using structural cost
+    complexity = structural_cost(rule)
     penalty = 0.02 * complexity
-    if isinstance(rule, CompositeRule):
-        if prefer_composites:
-            penalty /= math.sqrt(steps)
+    if isinstance(rule, CompositeRule) and prefer_composites:
+        penalty /= math.sqrt(len(rule.steps))
 
-    final = base - penalty
+    bonus = 0.0
+    if isinstance(rule, CompositeRule):
+        bonus = composite_bonus(rule, input_grid, output_grid)
+    final = base + bonus - penalty
     if final < 0.0:
         final = 0.0
     if final > 1.0:
