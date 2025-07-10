@@ -16,7 +16,7 @@ grid rotation.
 ## 3. Composite Rule System
 `CompositeRule` (defined in [`symbolic/rule_language.py`](arc_solver/src/symbolic/rule_language.py)) represents a sequence of `SymbolicRule` steps.  They were introduced to capture multi‑step patterns such as repeat tiling followed by recolouring.  `generate_repeat_composite_rules()` in [`symbolic/composite_rules.py`](arc_solver/src/symbolic/composite_rules.py) constructs chains like `REPEAT → REPLACE` by inspecting intermediate grids.  During dependency filtering `CompositeRule.as_symbolic_proxy()` exposes a simplified view so that `select_independent_rules()` can schedule them alongside simple rules.
 
-Scoring aggregates similarity metrics and applies a small complexity penalty based on the number of unique operations in the rule.  Colour validation simulates the full composite chain and only checks colour sufficiency at the final step, so temporary recolouring no longer causes rejection.
+Scoring aggregates similarity metrics and applies a small complexity penalty weighted by the unique operations present in the rule.  Colour validation simulates the full composite chain and only checks colour sufficiency at the final step, so temporary recolouring no longer causes rejection.
 
 ## 4. Scoring System
 `executor/scoring.py` implements the heuristic formula used by `solve_task`:
@@ -24,7 +24,7 @@ Scoring aggregates similarity metrics and applies a small complexity penalty bas
 base = 0.55 * after_pixel + 0.35 * zone_match + 0.1 * shape_bonus
 if after_pixel > before_pixel:
     base += 0.25 * (after_pixel - before_pixel)
-penalty = 0.006 * unique_ops
+penalty = 0.006 * op_cost
 bonus = 0.2 if isinstance(rule, CompositeRule) and base >= 0.95 else 0.0
 final = base - penalty + bonus
 ```

@@ -24,7 +24,8 @@ Composite rules represent a chain of symbolic transformations executed as a sing
 * **Zone-aware proxy** – `as_symbolic_proxy()` now merges `input_zones` and `output_zones`, fixing dependency misordering for multi-zone composites.【F:arc_solver/src/executor/proxy_ext.py†L40-L57】
 * **Zone chain proxy** – `as_symbolic_proxy()` records `zone_chain` pairs so `sort_rules_by_topology()` can order composites based on zone transitions.【F:arc_solver/src/executor/proxy_ext.py†L41-L91】【F:arc_solver/src/executor/dependency.py†L69-L111】
 * **Color validation update** – composite chains are validated as a whole with colour sufficiency checked only after the final step.【F:arc_solver/src/executor/simulator.py†L212-L340】
-* **Scoring overhaul** – penalties depend only on unique operation types and perfect composites receive a +0.2 bonus.【F:arc_solver/src/executor/scoring.py†L60-L109】
+* **Scoring overhaul** – penalties depend only on unique operation types and perfect composites receive a +0.2 bonus.【F:arc_solver/src/executor/scoring.py†L104-L187】
+* **Composite cost normalisation** – penalty weights are determined per operation type to better balance long chains.【F:arc_solver/src/executor/scoring.py†L82-L187】
 * **Grid growth forecast** – `simulate_composite_safe()` now predicts composite size using `grid_growth_forecast()` and aborts when the limit is exceeded.【F:arc_solver/src/executor/simulator.py†L60-L123】
 * **Training colour lineage** – `validate_color_dependencies` accepts chains when the final colours match the training grid and records transitions via a lineage tracker.
 
@@ -33,7 +34,7 @@ Composite rules represent a chain of symbolic transformations executed as a sing
 * Large grid expansions are validated ahead of time to avoid exceeding safety limits.
 
 ## Planned Mitigations
-* Further normalise cost for composites by weighting cost per unique transformation type.
+* ~~Further normalise cost for composites by weighting cost per unique transformation type.~~ Implemented via `op_cost()` weighting.
 * Relax colour validation when subsequent steps explicitly replace the missing colours.
 * Expand `as_symbolic_proxy()` to include zone information of each step so dependency ordering can reason about spatial scopes.
 * Implemented boundary checks and proactive uncertainty-map resizing when composites grow the grid.

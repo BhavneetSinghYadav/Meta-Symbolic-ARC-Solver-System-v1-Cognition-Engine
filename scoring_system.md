@@ -8,14 +8,14 @@ The scoring system ranks candidate rules by their expected contribution to solvi
 base = 0.55 * after_pixel + 0.35 * zone_match + 0.1 * shape_bonus
 if after_pixel > before_pixel:
     base += 0.25 * (after_pixel - before_pixel)
-penalty = 0.006 * unique_ops
+penalty = 0.006 * op_cost
 bonus = 0.2 if isinstance(rule, CompositeRule) and base >= 0.95 else 0.0
 final = base - penalty + bonus
 ```
-Lines【F:arc_solver/src/executor/scoring.py†L60-L109】 detail this logic. `after_pixel` is the raw grid match after applying the rule. `zone_match` measures how well labelled zones align, and `shape_bonus` rewards correct output shape. `unique_ops` counts the distinct operation types in the rule.
+Lines【F:arc_solver/src/executor/scoring.py†L82-L187】 detail this logic. `after_pixel` is the raw grid match after applying the rule. `zone_match` measures how well labelled zones align, and `shape_bonus` rewards correct output shape. `op_cost` sums the weighted unique transformation types involved in the rule.
 
 ### 2.1 Penalty Terms
-`unique_ops()` returns the number of distinct transformations used by a rule. This replaces the previous heavy dependence on `rule_cost`.
+`op_cost()` returns the weighted sum of unique transformation types used by a rule. It replaces the previous heavy dependence on `rule_cost` and pure operation counts.
 
 ### 2.2 Composite Bonus
 A composite rule that matches at least 95% similarity receives a `+0.2` bonus.
