@@ -25,17 +25,18 @@ Composite rules represent a chain of symbolic transformations executed as a sing
 * **Zone chain proxy** – `as_symbolic_proxy()` records `zone_chain` pairs so `sort_rules_by_topology()` can order composites based on zone transitions.【F:arc_solver/src/executor/proxy_ext.py†L41-L91】【F:arc_solver/src/executor/dependency.py†L69-L111】
 * **Color validation update** – composite chains are validated as a whole with colour sufficiency checked only after the final step.【F:arc_solver/src/executor/simulator.py†L212-L340】
 * **Scoring overhaul** – penalties depend only on unique operation types and perfect composites receive a +0.2 bonus.【F:arc_solver/src/executor/scoring.py†L60-L109】
+* **Grid growth forecast** – `simulate_composite_safe()` now predicts composite size using `grid_growth_forecast()` and aborts when the limit is exceeded.【F:arc_solver/src/executor/simulator.py†L60-L123】
 
 ## Remaining Failure Modes
 * Recolouring steps that introduce temporary colours can still cause validation rejection even after the lineage patch.
 * Proxy translation for advanced transformations (e.g. rotate within a composite) may misreport zones, leading to ordering mistakes.
-* Grid expansion by repeat steps occasionally exceeds the solver's safety limits, causing execution to abort.
+* Large grid expansions are validated ahead of time to avoid exceeding safety limits.
 
 ## Planned Mitigations
 * Further normalise cost for composites by weighting cost per unique transformation type.
 * Relax colour validation when subsequent steps explicitly replace the missing colours.
 * Expand `as_symbolic_proxy()` to include zone information of each step so dependency ordering can reason about spatial scopes.
-* Add boundary checks when expanding grids to safely resize the uncertainty map.
+* Implemented boundary checks and proactive uncertainty-map resizing when composites grow the grid.
 
 ## Stabilisation Suggestions
 * Provide unit tests covering longer chains and unusual colour sequences.

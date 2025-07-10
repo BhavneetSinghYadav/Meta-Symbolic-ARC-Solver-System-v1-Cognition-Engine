@@ -41,6 +41,10 @@ from arc_solver.src.utils.grid_utils import validate_grid
 logger = get_logger(__name__)
 CONFLICT_POLICY = config_loader.META_CONFIG.get("conflict_resolution", "most_frequent")
 
+# Maximum allowed grid dimension before simulation aborts
+MAX_GRID_DIM = 64
+
+
 
 def simulate_composite_rule(
     grid: Grid, rule: CompositeRule, *, uncertainty_grid: list[list[int]] | None = None
@@ -55,10 +59,48 @@ def simulate_composite_rule(
     return out
 
 
-def simulate_composite_safe(grid: Grid, rule: CompositeRule) -> Grid:
-    """Apply composite rule skipping invalid steps."""
+def grid_growth_forecast(
+    step: SymbolicRule | CompositeRule, start_shape: tuple[int, int]
+) -> tuple[int, int]:
+    """Return expected grid size after applying ``step`` to a dummy grid."""
+
+    h, w = start_shape
+    dummy = Grid([[0 for _ in range(w)] for _ in range(h)])
+    try:
+        if isinstance(step, CompositeRule):
+            for sub in step.steps:
+                dummy = safe_apply_rule(sub, dummy, perform_checks=False)
+        else:
+            dummy = safe_apply_rule(step, dummy, perform_checks=False)
+    except Exception:
+        return start_shape
+    return dummy.shape()
+
+
+def simulate_composite_safe(
+    grid: Grid, rule: CompositeRule, *, uncertainty_grid: list[list[int]] | None = None
+) -> Grid:
+    """Apply composite rule skipping invalid steps and validating size."""
+
     out = Grid([row[:] for row in grid.data])
-    for step in rule.steps:
+    for idx, step in enumerate(rule.steps):
+        forecast = grid_growth_forecast(step, out.shape())
+        if forecast[0] > MAX_GRID_DIM or forecast[1] > MAX_GRID_DIM:
+            log_failure(
+                task_id=None,
+                rule_id=str(rule),
+                rule_type="composite",
+                rule_steps=[str(s) for s in rule.steps],
+                rejection_stage="simulation",
+                failed_step_index=idx,
+                reason="grid_expansion_failure",
+            )
+            raise ValidationError(
+                f"grid would expand to {forecast}, exceeding {MAX_GRID_DIM}x{MAX_GRID_DIM}"
+            )
+        if uncertainty_grid is not None and forecast != out.shape():
+            _resize_grid_like(uncertainty_grid, Grid([[0] * forecast[1] for _ in range(forecast[0])]))
+
         if not validate_rule_application(step, out):
             continue
         out = safe_apply_rule(step, out, perform_checks=False)
@@ -79,6 +121,10 @@ def _grid_entropy(grid: Grid) -> float:
 
 class ReflexOverrideException(Exception):
     """Raised when a rule violates a reflex constraint."""
+
+
+class ValidationError(Exception):
+    """Raised when a rule would lead to an invalid grid state."""
 
 
 def _grid_contains(grid: Grid, value: int) -> bool:
@@ -725,6 +771,7 @@ def safe_apply_rule(
     *,
     lineage_tracker: ColorLineageTracker | None = None,
     task_id: str | None = None,
+    uncertainty_grid: list[list[int]] | None = None,
 ) -> Grid:
     """Apply ``rule`` safely, returning ``grid`` unchanged on failure."""
     logger.debug(f"Executing rule: {rule}")
@@ -735,6 +782,7 @@ def safe_apply_rule(
             attention_mask,
             perform_checks,
             lineage_tracker,
+            uncertainty_grid,
         )
     except IndexError as exc:
         logger.warning(f"IndexError applying rule {rule}: {exc}")
@@ -764,11 +812,12 @@ def _safe_apply_rule(
     attention_mask: Optional[List[List[bool]]] = None,
     perform_checks: bool = True,
     lineage_tracker: ColorLineageTracker | None = None,
+    uncertainty_grid: list[list[int]] | None = None,
 ) -> Grid:
     before = Grid([row[:] for row in grid.data])
 
     if isinstance(rule, CompositeRule):
-        after = simulate_composite_safe(grid, rule)
+        after = simulate_composite_safe(grid, rule, uncertainty_grid=uncertainty_grid)
     elif rule.transformation.ttype is TransformationType.REPLACE:
         try:
             after = _apply_replace(
@@ -1104,10 +1153,12 @@ __all__ = [
     "simulate_symbolic_program",
     "score_prediction",
     "ReflexOverrideException",
+    "ValidationError",
     "validate_rule_application",
     "check_symmetry_break",
     "visualize_uncertainty",
     "validate_color_dependencies",
+    "grid_growth_forecast",
     "simulate_composite_rule",
     "simulate_composite_safe",
 ]

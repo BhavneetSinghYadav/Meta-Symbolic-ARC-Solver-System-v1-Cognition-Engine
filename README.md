@@ -66,7 +66,7 @@ Sample notebooks in [`arc_solver/notebooks`](arc_solver/notebooks) demonstrate z
 
 ## 8. Known Issues / Future Work
 
-* Conflict marking resizes the uncertainty grid to avoid `IndexError` when rules expand the working grid【F:arc_solver/src/executor/simulator.py†L128-L170】.
+* Conflict marking resizes the uncertainty grid to avoid `IndexError` when rules expand the working grid. `simulate_composite_safe()` forecasts growth beforehand to keep grids under `64x64`.
 * Some advanced scoring functions are placeholders (`TODO` in comments) and require tuning.
 
 ## 9. Developer Notes
