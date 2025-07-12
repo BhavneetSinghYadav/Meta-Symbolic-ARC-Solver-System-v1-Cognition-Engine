@@ -7,6 +7,7 @@ from math import log2
 from typing import Any, List
 
 from arc_solver.src.core.grid import Grid
+from arc_solver.src.core.grid_proxy import GridProxy
 from arc_solver.src.segment.segmenter import zone_overlay
 
 
@@ -18,7 +19,7 @@ def _label_of(zone: Any) -> str:
         return str(zone)
 
 
-def zone_entropy_penalty(grid: Grid, zones: List[Any]) -> float:
+def zone_entropy_penalty(grid: Grid | GridProxy, zones: List[Any]) -> float:
     """Return negative entropy penalty for ``zones`` within ``grid``.
 
     Each zone's entropy is computed from its pixel color distribution. The
@@ -28,7 +29,7 @@ def zone_entropy_penalty(grid: Grid, zones: List[Any]) -> float:
     if not zones:
         return 0.0
 
-    overlay = zone_overlay(grid)
+    overlay = grid.get_zone_overlay() if isinstance(grid, GridProxy) else zone_overlay(grid)
     h = len(overlay)
     w = len(overlay[0]) if h else 0
 
@@ -60,13 +61,19 @@ def zone_entropy_penalty(grid: Grid, zones: List[Any]) -> float:
     return -0.1 * avg_ent
 
 
-def zone_alignment_bonus(predicted: Grid, target: Grid, zones: List[Any]) -> float:
+def zone_alignment_bonus(
+    predicted: Grid | GridProxy, target: Grid | GridProxy, zones: List[Any]
+) -> float:
     """Return bonus based on how well ``predicted`` aligns to ``target`` per zone."""
     if not zones:
         return 0.0
 
-    pred_overlay = zone_overlay(predicted)
-    tgt_overlay = zone_overlay(target)
+    pred_overlay = (
+        predicted.get_zone_overlay() if isinstance(predicted, GridProxy) else zone_overlay(predicted)
+    )
+    tgt_overlay = (
+        target.get_zone_overlay() if isinstance(target, GridProxy) else zone_overlay(target)
+    )
     h = len(pred_overlay)
     w = len(pred_overlay[0]) if h else 0
 
@@ -97,7 +104,7 @@ def zone_alignment_bonus(predicted: Grid, target: Grid, zones: List[Any]) -> flo
     return 0.1 * avg_overlap
 
 
-def zone_coverage_weight(predicted: Grid, zones: List[Any]) -> float:
+def zone_coverage_weight(predicted: Grid | GridProxy, zones: List[Any]) -> float:
     """Return coverage weight of ``predicted`` across ``zones``.
 
     The weight is the average ratio of non-zero pixels inside each zone,
@@ -107,7 +114,9 @@ def zone_coverage_weight(predicted: Grid, zones: List[Any]) -> float:
     if not zones:
         return 0.0
 
-    overlay = zone_overlay(predicted)
+    overlay = (
+        predicted.get_zone_overlay() if isinstance(predicted, GridProxy) else zone_overlay(predicted)
+    )
     h = len(overlay)
     w = len(overlay[0]) if h else 0
 

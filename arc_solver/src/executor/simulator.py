@@ -36,6 +36,7 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationType,
 )
 from arc_solver.src.segment.segmenter import zone_overlay
+from arc_solver.src.core.grid_proxy import GridProxy
 from arc_solver.src.executor.dependency import (
     sort_rules_by_dependency,
     sort_rules_by_topology,
@@ -53,6 +54,10 @@ except Exception:  # pragma: no cover - optional dependency
 from arc_solver.src.symbolic.zone_remap import zone_remap
 from arc_solver.src.symbolic.rotate_about_point import rotate_about_point
 from arc_solver.src.segment.segmenter import label_connected_regions, zone_overlay
+
+
+def _cached_zone_overlay(grid: Grid | GridProxy):
+    return grid.get_zone_overlay() if isinstance(grid, GridProxy) else zone_overlay(grid)
 
 
 logger = get_logger(__name__)
@@ -95,11 +100,12 @@ def grid_growth_forecast(
 
 
 def simulate_composite_safe(
-    grid: Grid, rule: CompositeRule, *, uncertainty_grid: list[list[int]] | None = None
+    grid: Grid | GridProxy, rule: CompositeRule, *, uncertainty_grid: list[list[int]] | None = None
 ) -> Grid:
     """Apply composite rule skipping invalid steps and validating size."""
 
-    out = Grid([row[:] for row in grid.data])
+    base = grid.to_grid() if isinstance(grid, GridProxy) else grid
+    out = Grid([row[:] for row in base.data])
     for idx, step in enumerate(rule.steps):
         forecast = grid_growth_forecast(step, out.shape())
         if forecast[0] > MAX_GRID_DIM or forecast[1] > MAX_GRID_DIM:
@@ -150,7 +156,9 @@ def simulate_composite_safe(
     return out
 
 
-def _grid_entropy(grid: Grid) -> float:
+def _grid_entropy(grid: Grid | GridProxy) -> float:
+    if isinstance(grid, GridProxy):
+        return grid.get_entropy()
     counts = grid.count_colors()
     total = sum(counts.values())
     ent = 0.0
@@ -188,10 +196,10 @@ def _grid_contains(grid: Grid, value: int) -> bool:
     return False
 
 
-def validate_rule_application(rule: SymbolicRule, grid: Grid) -> bool:
+def validate_rule_application(rule: SymbolicRule, grid: Grid | GridProxy) -> bool:
     zone = rule.condition.get("zone") if rule.condition else None
     if zone:
-        overlay = zone_overlay(grid)
+        overlay = _cached_zone_overlay(grid)
         zones = {sym.value for row in overlay for sym in row if sym}
         if zone not in zones:
             return False
@@ -599,7 +607,7 @@ def _apply_replace(
     h, w = grid.shape()
     new_data = [row[:] for row in grid.data]
     zone = rule.condition.get("zone") if rule.condition else None
-    overlay = zone_overlay(grid) if zone else None
+    overlay = _cached_zone_overlay(grid) if zone else None
     for r in range(h):
         for c in range(w):
             if attention_mask and not attention_mask[r][c]:
@@ -627,7 +635,7 @@ def _apply_translate(
     h, w = grid.shape()
     new_data = [[0 for _ in range(w)] for _ in range(h)]
     zone = rule.condition.get("zone") if rule.condition else None
-    overlay = zone_overlay(grid) if zone else None
+    overlay = _cached_zone_overlay(grid) if zone else None
     for r in range(h):
         for c in range(w):
             if attention_mask and not attention_mask[r][c]:
@@ -759,7 +767,7 @@ def _apply_conditional(
 
     h, w = grid.shape()
     zone = rule.condition.get("zone") if rule.condition else None
-    overlay = zone_overlay(grid) if zone else None
+    overlay = _cached_zone_overlay(grid) if zone else None
     new_data = [row[:] for row in grid.data]
     for r in range(h):
         for c in range(w):
@@ -991,7 +999,7 @@ def _apply_functional(
             if not isinstance(mapping, dict):
                 raise RuleExecutionError(rule, "missing mapping")
             try:
-                overlay = zone_overlay(grid)
+                overlay = _cached_zone_overlay(grid)
                 logger.debug("zone_remap mapping=%s", mapping)
                 new_grid = zone_remap(grid.to_list(), overlay, mapping)
                 result = Grid(new_grid)
@@ -1009,7 +1017,7 @@ def _apply_functional(
 
 def safe_apply_rule(
     rule: SymbolicRule,
-    grid: Grid,
+    grid: Grid | GridProxy,
     attention_mask: Optional[List[List[bool]]] = None,
     perform_checks: bool = True,
     *,
@@ -1051,24 +1059,25 @@ def safe_apply_rule(
 
 
 def _safe_apply_rule(
-    grid: Grid,
+    grid: Grid | GridProxy,
     rule: SymbolicRule,
     attention_mask: Optional[List[List[bool]]] = None,
     perform_checks: bool = True,
     lineage_tracker: ColorLineageTracker | None = None,
     uncertainty_grid: list[list[int]] | None = None,
 ) -> Grid:
-    before = Grid([row[:] for row in grid.data])
+    base_grid = grid.to_grid() if isinstance(grid, GridProxy) else grid
+    before = Grid([row[:] for row in base_grid.data])
 
     if isinstance(rule, CompositeRule):
         if rule.transformation.ttype is TransformationType.FUNCTIONAL:
-            after = _apply_functional(grid, rule, attention_mask)
+            after = _apply_functional(base_grid, rule, attention_mask)
         else:
-            after = simulate_composite_safe(grid, rule, uncertainty_grid=uncertainty_grid)
+            after = simulate_composite_safe(base_grid, rule, uncertainty_grid=uncertainty_grid)
     elif rule.transformation.ttype is TransformationType.REPLACE:
         try:
             after = _apply_replace(
-                grid,
+                base_grid,
                 rule,
                 attention_mask,
                 lineage_tracker=lineage_tracker,
@@ -1077,29 +1086,29 @@ def _safe_apply_rule(
             logger.warning(f"Rule application failed: {rule} — {e}")
             return grid
     elif rule.transformation.ttype is TransformationType.TRANSLATE:
-        after = _apply_translate(grid, rule, attention_mask)
+        after = _apply_translate(base_grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.REPEAT:
-        after = _apply_repeat(grid, rule, attention_mask)
+        after = _apply_repeat(base_grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.ROTATE:
-        after = _apply_rotate(grid, rule, attention_mask)
+        after = _apply_rotate(base_grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.ROTATE90:
-        after = _apply_rotate90(grid, rule, attention_mask)
+        after = _apply_rotate90(base_grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.SHAPE_ABSTRACT:
-        after = _apply_shape_abstract(grid, rule, attention_mask)
+        after = _apply_shape_abstract(base_grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.COMPOSITE:
-        after = _apply_repeat(grid, rule, attention_mask)
+        after = _apply_repeat(base_grid, rule, attention_mask)
         after = _apply_replace(after, rule, attention_mask, lineage_tracker=lineage_tracker)
     elif rule.transformation.ttype is TransformationType.CONDITIONAL:
-        after = _apply_conditional(grid, rule, attention_mask)
+        after = _apply_conditional(base_grid, rule, attention_mask)
     elif rule.transformation.ttype is TransformationType.REGION:
         after = _apply_region(
-            grid,
+            base_grid,
             rule,
             attention_mask,
             lineage_tracker=lineage_tracker,
         )
     elif rule.transformation.ttype is TransformationType.FUNCTIONAL:
-        after = _apply_functional(grid, rule, attention_mask)
+        after = _apply_functional(base_grid, rule, attention_mask)
     else:
         after = grid
 
@@ -1230,7 +1239,7 @@ def simulate_rules(
         if coverage_ratio < 0.01:
             rule.meta["demoted"] = True
         if zone:
-            overlay = zone_overlay(grid)
+            overlay = _cached_zone_overlay(grid)
             zone_cells = [
                 (r, c)
                 for r in range(gh)

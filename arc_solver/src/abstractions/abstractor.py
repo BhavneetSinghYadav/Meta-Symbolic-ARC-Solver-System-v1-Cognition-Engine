@@ -107,11 +107,15 @@ def align_segments(
 
 
 def segment_and_overlay(
-    input_grid: Grid, output_grid: Grid
+    input_grid: Grid | GridProxy, output_grid: Grid | GridProxy
 ) -> Tuple[List[List[Optional[Symbol]]], Dict[str, float]]:
     """Return IO-aligned zone overlay and entropy map."""
-    inp_overlay = zone_overlay(input_grid)
-    out_overlay = zone_overlay(output_grid)
+    inp_overlay = (
+        input_grid.get_zone_overlay() if isinstance(input_grid, GridProxy) else zone_overlay(input_grid)
+    )
+    out_overlay = (
+        output_grid.get_zone_overlay() if isinstance(output_grid, GridProxy) else zone_overlay(output_grid)
+    )
     overlay = align_segments(inp_overlay, out_overlay)
     entropies: Dict[str, float] = {}
     zones: Dict[str, List[int]] = {}
@@ -164,6 +168,7 @@ def generate_fallback_rules(pair: Tuple[Grid, Grid]) -> List[SymbolicRule]:
     return fallback_templates
 
 from arc_solver.src.segment.segmenter import zone_overlay, expand_zone_overlay
+from arc_solver.src.core.grid_proxy import GridProxy
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.executor.scoring import score_rule, preferred_rule_types
 from arc_solver.src.symbolic.rule_language import rule_to_dsl
@@ -868,14 +873,16 @@ def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[Symbo
 
 
 def extract_zone_remap_rules(
-    input_grid: Grid, output_grid: Grid
+    input_grid: Grid | GridProxy, output_grid: Grid | GridProxy
 ) -> List[SymbolicRule]:
     """Return functional zone remap rules where entire zones recolour."""
 
     if input_grid.shape() != output_grid.shape():
         return []
 
-    overlay_syms = zone_overlay(input_grid)
+    overlay_syms = (
+        input_grid.get_zone_overlay() if isinstance(input_grid, GridProxy) else zone_overlay(input_grid)
+    )
     h, w = input_grid.shape()
 
     label_to_id: Dict[str, int] = {}
