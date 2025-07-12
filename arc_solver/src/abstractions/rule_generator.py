@@ -134,17 +134,18 @@ def rule_cost(rule: SymbolicRule | CompositeRule) -> float:
     """Return heuristic cost of ``rule`` for sparsity ranking."""
     if isinstance(rule, CompositeRule):
         return sum(rule_cost(step) for step in rule.steps)
+    from arc_solver.src.executor.scoring import _op_cost
+
+    op_weight = float(_op_cost(rule))
     if (
         config_loader.SPARSE_MODE
         and rule.transformation.ttype is TransformationType.FUNCTIONAL
     ):
-        from arc_solver.src.executor.scoring import _op_cost
-
-        return float(_op_cost(rule))
+        return op_weight
     zone_str = rule.condition.get("zone", "") if rule.condition else ""
     zone_size = len(zone_str) if isinstance(zone_str, str) else len(str(zone_str))
     transform_complexity = len(rule_to_dsl(rule).split("->")[1])
-    return 0.5 * zone_size + transform_complexity
+    return op_weight + 0.5 * zone_size + 0.1 * transform_complexity
 
 
 __all__ = [
