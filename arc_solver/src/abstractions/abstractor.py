@@ -41,7 +41,9 @@ from arc_solver.src.symbolic.generators import (
     generate_zone_remap_rules,
     generate_rotate_about_point_rules,
     generate_morph_remap_composites,
+    generate_pattern_fill_rules,
 )
+from arc_solver.src.abstractions.rule_generator import generate_all_rules
 from arc_solver.src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -663,47 +665,12 @@ def generate_rotate_about_point_rule(input_grid: Grid, output_grid: Grid) -> Lis
 
 
 def generate_pattern_fill_rule(input_grid: Grid, output_grid: Grid) -> List[SymbolicRule]:
-    """Detect pattern fill between segmented regions."""
-    if input_grid.shape() != output_grid.shape():
-        return []
-    overlay = label_connected_regions(input_grid)
-    h, w = input_grid.shape()
-    zone_ids = {z for row in overlay for z in row if z is not None}
-    for src in zone_ids:
-        for tgt in zone_ids:
-            if src == tgt:
-                continue
-            try:
-                pred = pattern_fill(input_grid.to_list(), src, tgt, overlay)
-            except Exception:
-                continue
-            pred_grid = Grid(pred if isinstance(pred, list) else pred.tolist())
-            if pred_grid != output_grid:
-                continue
-            mask = [[1 if overlay[r][c] == tgt else 0 for c in range(w)] for r in range(h)]
-            cells = [(r, c) for r in range(h) for c in range(w) if overlay[r][c] == src and input_grid.get(r, c) != 0]
-            if not cells:
-                continue
-            rows = [r for r, _ in cells]
-            cols = [c for _, c in cells]
-            top, left, bottom, right = min(rows), min(cols), max(rows) + 1, max(cols) + 1
-            pattern = [
-                [input_grid.get(r, c) for c in range(left, right)]
-                for r in range(top, bottom)
-            ]
-            rule = SymbolicRule(
-                transformation=Transformation(
-                    TransformationType.FUNCTIONAL,
-                    params={"op": "pattern_fill"},
-                ),
-                source=[Symbol(SymbolType.REGION, "All")],
-                target=[Symbol(SymbolType.REGION, "All")],
-                nature=TransformationNature.SPATIAL,
-                meta={"mask": Grid(mask), "pattern": Grid(pattern)},
-            )
-            rule.meta["derivation"] = {"heuristic_used": "pattern_fill"}
-            logger.debug("pattern_fill matched source=%s target=%s", src, tgt)
-            return [rule]
+    """Wrapper for :func:`generate_pattern_fill_rules` for backward compatibility."""
+
+    rules = generate_pattern_fill_rules(input_grid, output_grid)
+    if rules:
+        logger.debug("pattern_fill matched %d rule(s)", len(rules))
+        return rules
     return []
 
 
@@ -819,16 +786,19 @@ def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[Symbo
             r.meta["score_trace"] = score_rule(input_grid, output_grid, r, return_trace=True)
         return morph
 
-    for gen in (
-        generate_dilate_zone_rules,
-        generate_erode_zone_rules,
-        generate_draw_line_rules,
-        generate_rotate_about_point_rules,
-        generate_mirror_tile_rules,
-    ):
-        candidates = gen(input_grid, output_grid)
-        if candidates:
-            return candidates
+    candidates = generate_all_rules(
+        input_grid,
+        output_grid,
+        allowlist=[
+            "dilate_zone",
+            "erode_zone",
+            "draw_line",
+            "rotate_about_point",
+            "mirror_tile",
+        ],
+    )
+    if candidates:
+        return candidates
 
     rot_rule = _detect_rotate_patch(input_grid, output_grid)
     if rot_rule:
