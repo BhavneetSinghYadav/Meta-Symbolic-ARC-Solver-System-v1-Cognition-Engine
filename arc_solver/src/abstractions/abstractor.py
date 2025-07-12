@@ -33,6 +33,15 @@ from arc_solver.src.symbolic.rotate_about_point import rotate_about_point
 from arc_solver.src.symbolic.operators import mirror_tile
 from arc_solver.src.symbolic.pattern_fill import pattern_fill
 from arc_solver.src.segment.segmenter import label_connected_regions
+from arc_solver.src.symbolic.generators import (
+    generate_mirror_tile_rules,
+    generate_draw_line_rules,
+    generate_dilate_zone_rules,
+    generate_erode_zone_rules,
+    generate_zone_remap_rules,
+    generate_rotate_about_point_rules,
+    generate_morph_remap_composites,
+)
 from arc_solver.src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -157,6 +166,7 @@ def generate_fallback_rules(pair: Tuple[Grid, Grid]) -> List[SymbolicRule]:
 from arc_solver.src.segment.segmenter import zone_overlay, expand_zone_overlay
 from arc_solver.src.executor.simulator import simulate_rules
 from arc_solver.src.executor.scoring import score_rule, preferred_rule_types
+from arc_solver.src.symbolic.rule_language import rule_to_dsl
 from arc_solver.src.utils import config_loader
 
 
@@ -799,31 +809,28 @@ def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[Symbo
 
     morph = _detect_zone_morphology(input_grid, output_grid)
     if morph:
+        for r in morph:
+            r.dsl_str = rule_to_dsl(r)
+            r.meta["score_trace"] = score_rule(input_grid, output_grid, r, return_trace=True)
         return morph
 
-    dil_rules = generate_dilate_zone_rule(input_grid, output_grid)
-    if dil_rules:
-        return dil_rules
-
-    ero_rules = generate_erode_zone_rule(input_grid, output_grid)
-    if ero_rules:
-        return ero_rules
-
-    line_rule = _detect_draw_line(input_grid, output_grid)
-    if line_rule:
-        return line_rule
+    for gen in (
+        generate_dilate_zone_rules,
+        generate_erode_zone_rules,
+        generate_draw_line_rules,
+        generate_rotate_about_point_rules,
+        generate_mirror_tile_rules,
+    ):
+        candidates = gen(input_grid, output_grid)
+        if candidates:
+            return candidates
 
     rot_rule = _detect_rotate_patch(input_grid, output_grid)
     if rot_rule:
+        for r in rot_rule:
+            r.dsl_str = rule_to_dsl(r)
+            r.meta["score_trace"] = score_rule(input_grid, output_grid, r, return_trace=True)
         return rot_rule
-
-    rot_point_rules = generate_rotate_about_point_rule(input_grid, output_grid)
-    if rot_point_rules:
-        return rot_point_rules
-
-    mirror_rules = generate_mirror_tile_rule(input_grid, output_grid)
-    if mirror_rules:
-        return mirror_rules
 
     # shape abstraction / rotation heuristics
     if input_grid.shape() == output_grid.shape():
@@ -1043,10 +1050,15 @@ def abstract(
                     )
                     rr.meta.setdefault("secondary_rules", []).append(repl)
                     rules.append(repl)
-        zone_rules = extract_zone_remap_rules(input_grid, output_grid)
+        zone_rules = generate_zone_remap_rules(input_grid, output_grid)
         if logger:
             logger.info(f"zone_remap_rules: {len(zone_rules)}")
         rules.extend(zone_rules)
+
+        composites = generate_morph_remap_composites(input_grid, output_grid)
+        if logger:
+            logger.info(f"morph_remap_composites: {len(composites)}")
+        rules.extend(composites)
         split: List[SymbolicRule] = []
         for r in rules:
             if (
@@ -1124,6 +1136,16 @@ def abstract(
     if other_pairs:
         retest_rules_on_pairs(valid_rules, other_pairs)
 
+    for r in valid_rules:
+        if not hasattr(r, "dsl_str"):
+            if hasattr(r, "as_symbolic_proxy"):
+                proxy = r.as_symbolic_proxy()
+                r.dsl_str = rule_to_dsl(proxy)
+            else:
+                r.dsl_str = rule_to_dsl(r)
+        if "score_trace" not in r.meta:
+            r.meta["score_trace"] = score_rule(input_grid, output_grid, r, return_trace=True)
+
     return layout + valid_rules
 
 
@@ -1136,6 +1158,13 @@ __all__ = [
     "generate_erode_zone_rule",
     "generate_mirror_tile_rule",
     "generate_rotate_about_point_rule",
+    "generate_mirror_tile_rules",
+    "generate_draw_line_rules",
+    "generate_dilate_zone_rules",
+    "generate_erode_zone_rules",
+    "generate_zone_remap_rules",
+    "generate_rotate_about_point_rules",
+    "generate_morph_remap_composites",
     "generate_pattern_fill_rule",
     "extract_zonewise_rules",
     "split_rule_by_overlay",

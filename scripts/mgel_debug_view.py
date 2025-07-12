@@ -135,7 +135,8 @@ def main() -> None:
     best_pred: Optional[Grid] = None
 
     for idx, rule in enumerate(rule_programs, 1):
-        print(f"\nRule {idx}: {rule_to_dsl(rule)}")
+        proxy = rule.as_symbolic_proxy() if hasattr(rule, "as_symbolic_proxy") else rule
+        print(f"\nRule {idx}: {rule_to_dsl(proxy)}")
         try:
             pred = simulate_rules(inp_grid, [rule])
         except Exception as err:  # pylint: disable=broad-except
