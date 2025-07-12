@@ -30,7 +30,12 @@ from arc_solver.src.symbolic.zone_remap import zone_remap
 from arc_solver.src.symbolic.morphology_ops import dilate_zone, erode_zone
 from arc_solver.src.symbolic.draw_line import draw_line
 from arc_solver.src.symbolic.rotate_about_point import rotate_about_point
+from arc_solver.src.symbolic.operators import mirror_tile
+from arc_solver.src.symbolic.pattern_fill import pattern_fill
 from arc_solver.src.segment.segmenter import label_connected_regions
+from arc_solver.src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 # Optional toggles controlling abstraction behaviour
 ENABLE_FALLBACK_COMPOSITES = True
@@ -507,6 +512,186 @@ def _detect_zone_morphology(
     return []
 
 
+def generate_dilate_zone_rule(input_grid: Grid, output_grid: Grid) -> List[SymbolicRule]:
+    """Return rule if ``output_grid`` is ``input_grid`` with a zone dilated."""
+    if input_grid.shape() != output_grid.shape():
+        return []
+    overlay = label_connected_regions(input_grid)
+    zone_ids = {z for row in overlay for z in row if z is not None}
+    rules: List[SymbolicRule] = []
+    for zid in zone_ids:
+        try:
+            pred = dilate_zone(input_grid.to_list(), zid, overlay)
+        except Exception:
+            continue
+        if Grid(pred if isinstance(pred, list) else pred.tolist()) == output_grid:
+            rule = SymbolicRule(
+                transformation=Transformation(
+                    TransformationType.FUNCTIONAL,
+                    params={"op": "dilate_zone", "zone": str(zid)},
+                ),
+                source=[Symbol(SymbolType.REGION, "All")],
+                target=[Symbol(SymbolType.REGION, "All")],
+                nature=TransformationNature.SPATIAL,
+            )
+            rule.meta["derivation"] = {"heuristic_used": "dilate_zone"}
+            logger.debug("dilate_zone matched zone=%s", zid)
+            rules.append(rule)
+            if len(rules) >= 25:
+                break
+    return rules
+
+
+def generate_erode_zone_rule(input_grid: Grid, output_grid: Grid) -> List[SymbolicRule]:
+    """Return rule if ``output_grid`` is ``input_grid`` with a zone eroded."""
+    if input_grid.shape() != output_grid.shape():
+        return []
+    overlay = label_connected_regions(input_grid)
+    zone_ids = {z for row in overlay for z in row if z is not None}
+    rules: List[SymbolicRule] = []
+    for zid in zone_ids:
+        try:
+            pred = erode_zone(input_grid.to_list(), zid, overlay)
+        except Exception:
+            continue
+        if Grid(pred if isinstance(pred, list) else pred.tolist()) == output_grid:
+            rule = SymbolicRule(
+                transformation=Transformation(
+                    TransformationType.FUNCTIONAL,
+                    params={"op": "erode_zone", "zone": str(zid)},
+                ),
+                source=[Symbol(SymbolType.REGION, "All")],
+                target=[Symbol(SymbolType.REGION, "All")],
+                nature=TransformationNature.SPATIAL,
+            )
+            rule.meta["derivation"] = {"heuristic_used": "erode_zone"}
+            logger.debug("erode_zone matched zone=%s", zid)
+            rules.append(rule)
+            if len(rules) >= 25:
+                break
+    return rules
+
+
+def generate_mirror_tile_rule(input_grid: Grid, output_grid: Grid) -> List[SymbolicRule]:
+    """Detect horizontal or vertical mirror tiling."""
+    rules: List[SymbolicRule] = []
+    ih, iw = input_grid.shape()
+    oh, ow = output_grid.shape()
+    for axis in ("horizontal", "vertical"):
+        if axis == "horizontal":
+            if oh != ih or ow % iw != 0:
+                continue
+            count = ow // iw
+        else:
+            if ow != iw or oh % ih != 0:
+                continue
+            count = oh // ih
+        if count <= 1 or count > 25:
+            continue
+        try:
+            pred = mirror_tile(input_grid, axis, count)
+        except Exception:
+            continue
+        if pred == output_grid:
+            rule = SymbolicRule(
+                transformation=Transformation(
+                    TransformationType.FUNCTIONAL,
+                    params={"op": "mirror_tile", "axis": axis, "repeats": str(count)},
+                ),
+                source=[Symbol(SymbolType.REGION, "All")],
+                target=[Symbol(SymbolType.REGION, "All")],
+                nature=TransformationNature.SPATIAL,
+            )
+            rule.meta["derivation"] = {"heuristic_used": "mirror_tile"}
+            logger.debug("mirror_tile matched axis=%s repeats=%s", axis, count)
+            rules.append(rule)
+    return rules[:25]
+
+
+def generate_rotate_about_point_rule(input_grid: Grid, output_grid: Grid) -> List[SymbolicRule]:
+    """Detect rotation around an arbitrary pivot point."""
+    if input_grid.shape() != output_grid.shape():
+        return []
+    h, w = input_grid.shape()
+    diff = [(r, c) for r in range(h) for c in range(w) if input_grid.get(r, c) != output_grid.get(r, c)]
+    if diff:
+        min_r = max(min(r for r, _ in diff) - 1, 0)
+        max_r = min(max(r for r, _ in diff) + 1, h - 1)
+        min_c = max(min(c for _, c in diff) - 1, 0)
+        max_c = min(max(c for _, c in diff) + 1, w - 1)
+        pivots = [(r, c) for r in range(min_r, max_r + 1) for c in range(min_c, max_c + 1)]
+    else:
+        pivots = [(h // 2, w // 2)]
+    rules: List[SymbolicRule] = []
+    for cx, cy in pivots[:25]:
+        for angle in (90, 180, 270):
+            try:
+                pred = rotate_about_point(input_grid, (cx, cy), angle)
+            except Exception:
+                continue
+            if pred == output_grid:
+                rule = SymbolicRule(
+                    transformation=Transformation(
+                        TransformationType.ROTATE,
+                        params={"cx": str(cx), "cy": str(cy), "angle": str(angle)},
+                    ),
+                    source=[Symbol(SymbolType.REGION, "All")],
+                    target=[Symbol(SymbolType.REGION, "All")],
+                    nature=TransformationNature.SPATIAL,
+                )
+                rule.meta["derivation"] = {"heuristic_used": "rotate_about_point"}
+                logger.debug("rotate_about_point matched pivot=(%s,%s) angle=%s", cx, cy, angle)
+                rules.append(rule)
+                if len(rules) >= 25:
+                    return rules
+    return rules
+
+
+def generate_pattern_fill_rule(input_grid: Grid, output_grid: Grid) -> List[SymbolicRule]:
+    """Detect pattern fill between segmented regions."""
+    if input_grid.shape() != output_grid.shape():
+        return []
+    overlay = label_connected_regions(input_grid)
+    h, w = input_grid.shape()
+    zone_ids = {z for row in overlay for z in row if z is not None}
+    for src in zone_ids:
+        for tgt in zone_ids:
+            if src == tgt:
+                continue
+            try:
+                pred = pattern_fill(input_grid.to_list(), src, tgt, overlay)
+            except Exception:
+                continue
+            pred_grid = Grid(pred if isinstance(pred, list) else pred.tolist())
+            if pred_grid != output_grid:
+                continue
+            mask = [[1 if overlay[r][c] == tgt else 0 for c in range(w)] for r in range(h)]
+            cells = [(r, c) for r in range(h) for c in range(w) if overlay[r][c] == src and input_grid.get(r, c) != 0]
+            if not cells:
+                continue
+            rows = [r for r, _ in cells]
+            cols = [c for _, c in cells]
+            top, left, bottom, right = min(rows), min(cols), max(rows) + 1, max(cols) + 1
+            pattern = [
+                [input_grid.get(r, c) for c in range(left, right)]
+                for r in range(top, bottom)
+            ]
+            rule = SymbolicRule(
+                transformation=Transformation(
+                    TransformationType.FUNCTIONAL,
+                    params={"op": "pattern_fill"},
+                ),
+                source=[Symbol(SymbolType.REGION, "All")],
+                target=[Symbol(SymbolType.REGION, "All")],
+                nature=TransformationNature.SPATIAL,
+                meta={"mask": Grid(mask), "pattern": Grid(pattern)},
+            )
+            rule.meta["derivation"] = {"heuristic_used": "pattern_fill"}
+            logger.debug("pattern_fill matched source=%s target=%s", src, tgt)
+            return [rule]
+    return []
+
+
 def _detect_draw_line(
     input_grid: Grid, output_grid: Grid
 ) -> List[SymbolicRule]:
@@ -616,6 +801,14 @@ def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[Symbo
     if morph:
         return morph
 
+    dil_rules = generate_dilate_zone_rule(input_grid, output_grid)
+    if dil_rules:
+        return dil_rules
+
+    ero_rules = generate_erode_zone_rule(input_grid, output_grid)
+    if ero_rules:
+        return ero_rules
+
     line_rule = _detect_draw_line(input_grid, output_grid)
     if line_rule:
         return line_rule
@@ -623,6 +816,14 @@ def extract_shape_based_rules(input_grid: Grid, output_grid: Grid) -> List[Symbo
     rot_rule = _detect_rotate_patch(input_grid, output_grid)
     if rot_rule:
         return rot_rule
+
+    rot_point_rules = generate_rotate_about_point_rule(input_grid, output_grid)
+    if rot_point_rules:
+        return rot_point_rules
+
+    mirror_rules = generate_mirror_tile_rule(input_grid, output_grid)
+    if mirror_rules:
+        return mirror_rules
 
     # shape abstraction / rotation heuristics
     if input_grid.shape() == output_grid.shape():
@@ -812,6 +1013,10 @@ def abstract(
         if logger:
             logger.info(f"shape_based_rules: {len(shape_rules)}")
         rules.extend(shape_rules)
+        pf_rules = generate_pattern_fill_rule(mid_grid, output_grid)
+        if logger:
+            logger.info(f"pattern_fill_rules: {len(pf_rules)}")
+        rules.extend(pf_rules)
         repeat_rules = generate_repeat_rules(mid_grid, output_grid, post_process=True)
         if logger:
             logger.info(f"repeat_rules: {len(repeat_rules)}")
@@ -927,6 +1132,11 @@ __all__ = [
     "extract_color_change_rules",
     "extract_shape_based_rules",
     "extract_zone_remap_rules",
+    "generate_dilate_zone_rule",
+    "generate_erode_zone_rule",
+    "generate_mirror_tile_rule",
+    "generate_rotate_about_point_rule",
+    "generate_pattern_fill_rule",
     "extract_zonewise_rules",
     "split_rule_by_overlay",
     "retest_rules_on_pairs",
