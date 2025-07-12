@@ -38,3 +38,25 @@ def test_parse_new_transforms():
     r2 = parse_rule("SHAPE_ABSTRACT [SHAPE=A] -> [SHAPE=A]")
     assert r1.transformation.ttype is TransformationType.ROTATE90
     assert r2.transformation.ttype is TransformationType.SHAPE_ABSTRACT
+
+
+def _roundtrip(dsl: str) -> None:
+    obj = parse_rule(dsl)
+    out = rule_to_dsl(obj)
+    obj2 = parse_rule(out)
+    assert rule_to_dsl(obj2) == out
+    assert obj2.transformation.params == obj.transformation.params
+    assert obj2.meta == obj.meta
+
+
+def test_extended_operator_roundtrip():
+    cases = [
+        "mirror_tile(axis=horizontal, repeats=2) [REGION=All] -> [REGION=All]",
+        "pattern_fill(mapping={1:2}) [REGION=All] -> [REGION=All]",
+        "rotate_about_point(pivot=(1,2), angle=90) [REGION=All] -> [REGION=All]",
+        "zone_remap(mapping={1:3}) [REGION=All] -> [REGION=All]",
+        "dilate_zone(zone_id=1) [ZONE=1] -> [ZONE=1]",
+        "erode_zone(zone_id=2) [ZONE=2] -> [ZONE=2]",
+    ]
+    for dsl in cases:
+        _roundtrip(dsl)
