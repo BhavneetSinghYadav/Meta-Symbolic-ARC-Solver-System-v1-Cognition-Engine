@@ -831,7 +831,9 @@ def _apply_functional(
                 logger.debug(
                     "mirror_tile axis=%s repeats=%s", axis, repeats
                 )
-                return mirror_tile(grid, axis, repeats)
+                result = mirror_tile(grid, axis, repeats)
+                logger.debug("mirror_tile result size=%s", result.shape())
+                return result
             except Exception as exc:
                 raise RuleExecutionError(rule, str(exc)) from exc
 
@@ -842,7 +844,9 @@ def _apply_functional(
                 raise RuleExecutionError(rule, "missing mask or pattern")
             try:
                 logger.debug("pattern_fill execution")
-                return pattern_fill(grid, mask, pattern)
+                result = pattern_fill(grid, mask, pattern)
+                logger.debug("pattern_fill result size=%s", result.shape())
+                return result
             except Exception as exc:
                 raise RuleExecutionError(rule, str(exc)) from exc
 
@@ -857,7 +861,40 @@ def _apply_functional(
                 raise RuleExecutionError(rule, f"invalid parameters: {exc}") from exc
             try:
                 logger.debug("draw_line p1=%s p2=%s color=%s", p1, p2, color)
-                return draw_line(grid, p1, p2, color)
+                result = draw_line(grid, p1, p2, color)
+                logger.debug("draw_line result size=%s", result.shape())
+                return result
+            except Exception as exc:
+                raise RuleExecutionError(rule, str(exc)) from exc
+
+        case "rotate_about_point":
+            pivot_raw = rule.transformation.params.get("pivot")
+            cx = cy = None
+            if pivot_raw is not None:
+                try:
+                    cx, cy = [int(x) for x in str(pivot_raw).strip("() ").split(",")]
+                except Exception as exc:  # noqa: PERF203 - simple validation
+                    raise RuleExecutionError(rule, f"invalid pivot: {exc}") from exc
+            else:
+                try:
+                    cx = int(rule.transformation.params.get("cx", "0"))
+                    cy = int(rule.transformation.params.get("cy", "0"))
+                except Exception as exc:
+                    raise RuleExecutionError(rule, f"invalid pivot: {exc}") from exc
+            try:
+                angle = int(rule.transformation.params.get("angle", "0"))
+            except Exception as exc:
+                raise RuleExecutionError(rule, f"invalid angle: {exc}") from exc
+            h, w = grid.shape()
+            if not (0 <= cx < h and 0 <= cy < w):
+                raise RuleExecutionError(rule, "pivot out of bounds")
+            try:
+                logger.debug(
+                    "rotate_about_point pivot=(%s,%s) angle=%s", cx, cy, angle
+                )
+                result = rotate_about_point(grid, (cx, cy), angle)
+                logger.debug("rotate_about_point result size=%s", result.shape())
+                return result
             except Exception as exc:
                 raise RuleExecutionError(rule, str(exc)) from exc
 
@@ -871,7 +908,9 @@ def _apply_functional(
                 overlay = label_connected_regions(grid)
                 logger.debug("dilate_zone id=%s", zone_id)
                 new = dilate_zone(grid.to_list(), zone_id, overlay)
-                return Grid(new if isinstance(new, list) else new.tolist())
+                result = Grid(new if isinstance(new, list) else new.tolist())
+                logger.debug("dilate_zone result size=%s", result.shape())
+                return result
             except Exception as exc:
                 raise RuleExecutionError(rule, str(exc)) from exc
 
@@ -885,7 +924,9 @@ def _apply_functional(
                 overlay = label_connected_regions(grid)
                 logger.debug("erode_zone id=%s", zone_id)
                 new = erode_zone(grid.to_list(), zone_id, overlay)
-                return Grid(new if isinstance(new, list) else new.tolist())
+                result = Grid(new if isinstance(new, list) else new.tolist())
+                logger.debug("erode_zone result size=%s", result.shape())
+                return result
             except Exception as exc:
                 raise RuleExecutionError(rule, str(exc)) from exc
 
@@ -897,7 +938,9 @@ def _apply_functional(
                 overlay = zone_overlay(grid)
                 logger.debug("zone_remap mapping=%s", mapping)
                 new_grid = zone_remap(grid.to_list(), overlay, mapping)
-                return Grid(new_grid)
+                result = Grid(new_grid)
+                logger.debug("zone_remap result size=%s", result.shape())
+                return result
             except Exception as exc:
                 raise RuleExecutionError(rule, str(exc)) from exc
 
@@ -962,7 +1005,10 @@ def _safe_apply_rule(
     before = Grid([row[:] for row in grid.data])
 
     if isinstance(rule, CompositeRule):
-        after = simulate_composite_safe(grid, rule, uncertainty_grid=uncertainty_grid)
+        if rule.transformation.ttype is TransformationType.FUNCTIONAL:
+            after = _apply_functional(grid, rule, attention_mask)
+        else:
+            after = simulate_composite_safe(grid, rule, uncertainty_grid=uncertainty_grid)
     elif rule.transformation.ttype is TransformationType.REPLACE:
         try:
             after = _apply_replace(
