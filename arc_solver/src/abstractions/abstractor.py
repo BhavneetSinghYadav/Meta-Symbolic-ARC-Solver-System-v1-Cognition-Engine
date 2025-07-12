@@ -1047,6 +1047,14 @@ def abstract(
                 split.append(r)
         rules = split
 
+        # Consolidate near-identical rules before scoring
+        try:
+            from arc_solver.src.utils.rule_utils import generalize_rules as _gen_rules
+
+            rules = _gen_rules(rules)
+        except Exception:
+            pass
+
         # ------------------------------------------------------------------
         # Prioritize rules using scoring and strategy registry
         # ------------------------------------------------------------------
