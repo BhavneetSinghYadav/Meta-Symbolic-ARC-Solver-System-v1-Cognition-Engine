@@ -209,6 +209,12 @@ class SymbolicRule:
             return True
         return False
 
+    def as_symbolic_proxy(self) -> "SymbolicRule":
+        """Return proxy describing this rule with zone metadata."""
+        from arc_solver.src.executor.proxy_ext import as_symbolic_proxy as _proxy
+
+        return _proxy(self)
+
 
 __all__ = [
     "SymbolType",

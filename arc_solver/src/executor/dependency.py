@@ -71,18 +71,16 @@ def sort_rules_by_topology(rules: List[SymbolicRule | CompositeRule]) -> List[Sy
 
     chains: List[List[Tuple[List[str], List[str]]]] = []
     for rule in rules:
-        if isinstance(rule, CompositeRule):
-            proxy = rule.as_symbolic_proxy()
-            chain = proxy.meta.get("zone_scope_chain")
-            if not chain:
-                chain = [
-                    ([z1] if z1 else [], [z2] if z2 else [])
-                    for z1, z2 in proxy.meta.get("zone_chain", [])
-                ]
-            chains.append(chain)
-        else:
-            zone = rule.condition.get("zone") if rule.condition else None
-            chains.append([([zone] if zone else [], [zone] if zone else [])])
+        proxy = rule.as_symbolic_proxy() if hasattr(rule, "as_symbolic_proxy") else rule
+        chain = getattr(proxy, "meta", {}).get("zone_scope_chain")
+        if not chain:
+            zone_pairs = getattr(proxy, "meta", {}).get("zone_chain")
+            if zone_pairs:
+                chain = [([z1] if z1 else [], [z2] if z2 else []) for z1, z2 in zone_pairs]
+        if not chain:
+            zone = getattr(proxy, "condition", {}).get("zone") if getattr(proxy, "condition", None) else None
+            chain = [([zone] if zone else [], [zone] if zone else [])]
+        chains.append(chain)
 
     graph = rule_dependency_graph(rules)
 
