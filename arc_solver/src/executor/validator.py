@@ -5,10 +5,15 @@ from __future__ import annotations
 from typing import List, Set, Iterable
 
 from arc_solver.src.core.grid import Grid
-from arc_solver.src.symbolic.vocabulary import SymbolicRule, SymbolType
+from arc_solver.src.symbolic.vocabulary import SymbolicRule, SymbolType, TransformationType
 from arc_solver.src.symbolic.rule_language import CompositeRule
 from .failure_logger import log_failure
 from arc_solver.simulator import ColorLineageTracker
+from .functional_utils import (
+    validate_functional_params,
+    InvalidParameterError,
+    UnsafeTransformationError,
+)
 
 
 def simulate_step(rule_step: SymbolicRule | CompositeRule, grid: Grid) -> Grid:
@@ -73,6 +78,20 @@ def validate_color_dependencies(
                             required.add(val)
                     except ValueError:
                         pass
+            if st.transformation.ttype is TransformationType.FUNCTIONAL:
+                try:
+                    validate_functional_params(st, working)
+                except (InvalidParameterError, UnsafeTransformationError) as exc:
+                    log_failure(
+                        task_id=task_id,
+                        rule_id=rule_id or "chain",
+                        rule_type="composite",
+                        rule_steps=[str(s) for s in rule_chain],
+                        rejection_stage="validation",
+                        failed_step_index=None,
+                        reason=str(exc),
+                    )
+                    return False
             before = Grid([row[:] for row in working.data])
             working = simulate_step(st, working)
             if lineage_tracker is not None:

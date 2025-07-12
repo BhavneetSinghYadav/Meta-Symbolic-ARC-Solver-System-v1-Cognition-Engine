@@ -22,6 +22,11 @@ from arc_solver.src.symbolic.rule_language import CompositeRule
 from arc_solver.src.utils import config_loader
 from arc_solver.src.utils.coverage import rule_coverage
 from arc_solver.src.executor.validator import get_color_set
+from arc_solver.src.executor.functional_utils import (
+    validate_functional_params,
+    InvalidParameterError,
+    UnsafeTransformationError,
+)
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import (
@@ -112,6 +117,32 @@ def simulate_composite_safe(
             )
         if uncertainty_grid is not None and forecast != out.shape():
             _resize_grid_like(uncertainty_grid, Grid([[0] * forecast[1] for _ in range(forecast[0])]))
+
+        if step.transformation.ttype is TransformationType.FUNCTIONAL:
+            try:
+                validate_functional_params(step, out)
+            except InvalidParameterError as exc:
+                log_failure(
+                    task_id=None,
+                    rule_id=str(rule),
+                    rule_type="composite",
+                    rule_steps=[str(s) for s in rule.steps],
+                    rejection_stage="simulation",
+                    failed_step_index=idx,
+                    reason="invalid_parameters",
+                )
+                raise
+            except UnsafeTransformationError as exc:
+                log_failure(
+                    task_id=None,
+                    rule_id=str(rule),
+                    rule_type="composite",
+                    rule_steps=[str(s) for s in rule.steps],
+                    rejection_stage="simulation",
+                    failed_step_index=idx,
+                    reason="unsafe_transformation",
+                )
+                raise
 
         if not validate_rule_application(step, out):
             continue
