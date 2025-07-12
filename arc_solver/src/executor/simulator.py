@@ -912,7 +912,9 @@ def _apply_functional(
                 raise RuleExecutionError(rule, f"invalid parameters: {exc}") from exc
             try:
                 logger.debug("draw_line p1=%s p2=%s color=%s", p1, p2, color)
-                result = draw_line(grid, p1, p2, color)
+                base = grid.to_list() if hasattr(grid, "to_list") else grid
+                raw = draw_line(base, p1, p2, color)
+                result = Grid(raw if isinstance(raw, list) else raw.tolist())
                 logger.debug("draw_line result size=%s", result.shape())
                 return result
             except Exception as exc:

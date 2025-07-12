@@ -2,13 +2,34 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 from arc_solver.src.symbolic.rule_language import rule_to_dsl
 from arc_solver.src.utils import config_loader
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.symbolic.vocabulary import SymbolicRule, TransformationType
 from arc_solver.src.symbolic.rule_language import CompositeRule
+from arc_solver.src.symbolic.generators import (
+    generate_mirror_tile_rules,
+    generate_draw_line_rules,
+    generate_dilate_zone_rules,
+    generate_erode_zone_rules,
+    generate_zone_remap_rules,
+    generate_rotate_about_point_rules,
+    generate_morph_remap_composites,
+    generate_pattern_fill_rules,
+)
+
+OPERATOR_GENERATORS: Dict[str, Callable[[Grid, Grid], List[SymbolicRule | CompositeRule]]] = {
+    "mirror_tile": generate_mirror_tile_rules,
+    "draw_line": generate_draw_line_rules,
+    "dilate_zone": generate_dilate_zone_rules,
+    "erode_zone": generate_erode_zone_rules,
+    "zone_remap": generate_zone_remap_rules,
+    "rotate_about_point": generate_rotate_about_point_rules,
+    "morph_remap_composites": generate_morph_remap_composites,
+    "pattern_fill": generate_pattern_fill_rules,
+}
 
 
 def generalize_rules(
@@ -148,10 +169,43 @@ def rule_cost(rule: SymbolicRule | CompositeRule) -> float:
     return op_weight + 0.5 * zone_size + 0.1 * transform_complexity
 
 
+def generate_all_rules(
+    grid_in: Grid,
+    grid_out: Grid,
+    *,
+    allowlist: List[str] | None = None,
+    blocklist: List[str] | None = None,
+) -> List[SymbolicRule | CompositeRule]:
+    """Return candidate rules from all registered operator generators."""
+
+    allowed = set(allowlist) if allowlist else set(OPERATOR_GENERATORS)
+    blocked = set(blocklist or [])
+    rules: List[SymbolicRule | CompositeRule] = []
+    for name, gen in OPERATOR_GENERATORS.items():
+        if name not in allowed or name in blocked:
+            continue
+        try:
+            candidates = gen(grid_in, grid_out)
+        except Exception:
+            continue
+        for r in candidates:
+            if not r.is_well_formed():
+                continue
+            try:
+                r.dsl_str = rule_to_dsl(r)
+            except Exception:
+                continue
+            r.meta.setdefault("source", f"generator:{name}")
+            rules.append(r)
+    return rules
+
+
 __all__ = [
     "generalize_rules",
     "score_rules",
     "normalize_rule_dsl",
     "remove_duplicate_rules",
     "rule_cost",
+    "generate_all_rules",
+    "OPERATOR_GENERATORS",
 ]

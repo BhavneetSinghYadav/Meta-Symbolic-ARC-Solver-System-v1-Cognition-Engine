@@ -2,6 +2,7 @@
 
 from .mirror_tile import generate_mirror_tile_rules
 from .line_draw import generate_draw_line_rules
+from .pattern_fill import generate_pattern_fill_rules
 from .zone_morph import (
     generate_dilate_zone_rules,
     generate_erode_zone_rules,
@@ -13,6 +14,7 @@ from .zone_morph import (
 __all__ = [
     "generate_mirror_tile_rules",
     "generate_draw_line_rules",
+    "generate_pattern_fill_rules",
     "generate_dilate_zone_rules",
     "generate_erode_zone_rules",
     "generate_zone_remap_rules",
