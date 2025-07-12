@@ -155,3 +155,99 @@
 ```python
 # Example coming soon
 ```
+
+## dilate_zone
+
+**DSL Keyword:** `dilate_zone`
+
+**Transformation Type:** `FUNCTIONAL`
+
+**Parameters:** zone_id
+
+**Description:** Dilate the pixels of ``zone_id`` by one cell inside ``zone_overlay``.
+
+**Example:**
+
+```python
+# Example coming soon
+```
+
+## erode_zone
+
+**DSL Keyword:** `erode_zone`
+
+**Transformation Type:** `FUNCTIONAL`
+
+**Parameters:** zone_id
+
+**Description:** Erode ``zone_id`` by removing boundary pixels within ``zone_overlay``.
+
+**Example:**
+
+```python
+# Example coming soon
+```
+
+## mirror_tile
+
+**DSL Keyword:** `mirror_tile`
+
+**Transformation Type:** `FUNCTIONAL`
+
+**Parameters:** axis, repeats
+
+**Description:** Return grid tiled ``count`` times while mirroring every other tile.
+
+**Example:**
+
+```python
+# Example coming soon
+```
+
+## pattern_fill
+
+**DSL Keyword:** `pattern_fill`
+
+**Transformation Type:** `FUNCTIONAL`
+
+**Parameters:** mapping
+
+**Description:** Return ``grid`` with a pattern copied from ``source_zone_id`` to ``target_zone_id``.
+
+**Example:**
+
+```python
+# Example coming soon
+```
+
+## rotate_about_point
+
+**DSL Keyword:** `rotate_about_point`
+
+**Transformation Type:** `ROTATE`
+
+**Parameters:** pivot, angle
+
+**Description:** Return ``grid`` rotated ``angle`` degrees about ``center``.
+
+**Example:**
+
+```python
+# Example coming soon
+```
+
+## zone_remap
+
+**DSL Keyword:** `zone_remap`
+
+**Transformation Type:** `FUNCTIONAL`
+
+**Parameters:** mapping
+
+**Description:** Return a new grid with zones recoloured via ``zone_to_color``.
+
+**Example:**
+
+```python
+# Example coming soon
+```
