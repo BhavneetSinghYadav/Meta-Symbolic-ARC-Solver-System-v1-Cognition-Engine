@@ -8,7 +8,7 @@ program parsing.
 
 from __future__ import annotations
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, field
 import logging
 import ast
@@ -33,6 +33,156 @@ DSL_GRAMMAR = {
 }
 
 MAX_SYMBOL_VALUE = 10
+
+
+@dataclass
+class OperatorSpec:
+    """Metadata describing a functional DSL operator."""
+
+    ttype: TransformationType
+    params: List[str]
+    parser: Callable[[Dict[str, str]], tuple[Dict[str, str], Dict[str, Any]]]
+    serializer: Callable[[Dict[str, str], Dict[str, Any]], List[str]]
+    description: str = ""
+
+
+def get_extended_operators() -> Dict[str, OperatorSpec]:
+    """Return mapping of functional operator names to their specs."""
+
+    def _mirror_tile_parse(p: Dict[str, str]) -> tuple[Dict[str, str], Dict[str, Any]]:
+        return {
+            "op": "mirror_tile",
+            "axis": p.get("axis", "horizontal"),
+            "repeats": p.get("repeats", "2"),
+        }, {}
+
+    def _mirror_tile_ser(params: Dict[str, str], meta: Dict[str, Any]) -> List[str]:
+        out = []
+        if axis := params.get("axis"):
+            out.append(f"axis={axis}")
+        if reps := params.get("repeats"):
+            out.append(f"repeats={reps}")
+        return out
+
+    def _rotate_parse(p: Dict[str, str]) -> tuple[Dict[str, str], Dict[str, Any]]:
+        meta: Dict[str, Any] = {}
+        params: Dict[str, str] = {}
+        pivot = p.get("pivot")
+        if pivot:
+            try:
+                cx, cy = [x.strip() for x in pivot.strip("() ").split(",")]
+                params["cx"] = cx
+                params["cy"] = cy
+            except Exception:
+                meta["pivot"] = pivot
+        angle = p.get("angle")
+        if angle:
+            params["angle"] = angle
+        return params, meta
+
+    def _rotate_ser(params: Dict[str, str], meta: Dict[str, Any]) -> List[str]:
+        out = []
+        if "cx" in params and "cy" in params:
+            out.append(f"pivot=({params['cx']},{params['cy']})")
+        if angle := params.get("angle"):
+            out.append(f"angle={angle}")
+        return out
+
+    def _zone_remap_parse(p: Dict[str, str]) -> tuple[Dict[str, str], Dict[str, Any]]:
+        meta: Dict[str, Any] = {}
+        mapping = p.get("mapping")
+        if mapping is not None:
+            try:
+                meta["mapping"] = ast.literal_eval(mapping)
+            except Exception:
+                meta["mapping"] = mapping
+        return {"op": "zone_remap"}, meta
+
+    def _zone_remap_ser(params: Dict[str, str], meta: Dict[str, Any]) -> List[str]:
+        mapping = meta.get("mapping") or params.get("mapping")
+        if mapping is None:
+            return []
+        if isinstance(mapping, dict):
+            items = ", ".join(f"{k}: {v}" for k, v in sorted(mapping.items()))
+            return ["mapping={" + items + "}"]
+        return [f"mapping={mapping}"]
+
+    def _pattern_fill_parse(p: Dict[str, str]) -> tuple[Dict[str, str], Dict[str, Any]]:
+        meta: Dict[str, Any] = {}
+        mapping = p.get("mapping")
+        if mapping is not None:
+            try:
+                meta["mapping"] = ast.literal_eval(mapping)
+            except Exception:
+                meta["mapping"] = mapping
+        return {"op": "pattern_fill"}, meta
+
+    def _pattern_fill_ser(params: Dict[str, str], meta: Dict[str, Any]) -> List[str]:
+        mapping = meta.get("mapping") or params.get("mapping")
+        if mapping is None:
+            return []
+        if isinstance(mapping, dict):
+            items = ", ".join(f"{k}: {v}" for k, v in sorted(mapping.items()))
+            return ["mapping={" + items + "}"]
+        return [f"mapping={mapping}"]
+
+    def _morph_parse(name: str) -> Callable[[Dict[str, str]], tuple[Dict[str, str], Dict[str, Any]]]:
+        def inner(p: Dict[str, str]) -> tuple[Dict[str, str], Dict[str, Any]]:
+            zone = p.get("zone") or p.get("zone_id")
+            d: Dict[str, str] = {"op": name}
+            if zone is not None:
+                d["zone"] = zone
+            return d, {}
+        return inner
+
+    def _morph_ser(params: Dict[str, str], meta: Dict[str, Any]) -> List[str]:
+        zone = params.get("zone") or params.get("zone_id")
+        return [f"zone_id={zone}"] if zone is not None else []
+
+    return {
+        "mirror_tile": OperatorSpec(
+            ttype=TransformationType.FUNCTIONAL,
+            params=["axis", "repeats"],
+            parser=_mirror_tile_parse,
+            serializer=_mirror_tile_ser,
+            description="Tile the grid while mirroring every second tile",
+        ),
+        "rotate_about_point": OperatorSpec(
+            ttype=TransformationType.ROTATE,
+            params=["pivot", "angle"],
+            parser=_rotate_parse,
+            serializer=_rotate_ser,
+            description="Rotate the grid around a pivot point",
+        ),
+        "zone_remap": OperatorSpec(
+            ttype=TransformationType.FUNCTIONAL,
+            params=["mapping"],
+            parser=_zone_remap_parse,
+            serializer=_zone_remap_ser,
+            description="Recolour zones according to a mapping",
+        ),
+        "pattern_fill": OperatorSpec(
+            ttype=TransformationType.FUNCTIONAL,
+            params=["mapping"],
+            parser=_pattern_fill_parse,
+            serializer=_pattern_fill_ser,
+            description="Fill target zone with pattern from source zone",
+        ),
+        "dilate_zone": OperatorSpec(
+            ttype=TransformationType.FUNCTIONAL,
+            params=["zone_id"],
+            parser=_morph_parse("dilate_zone"),
+            serializer=_morph_ser,
+            description="Dilate pixels of the given zone",
+        ),
+        "erode_zone": OperatorSpec(
+            ttype=TransformationType.FUNCTIONAL,
+            params=["zone_id"],
+            parser=_morph_parse("erode_zone"),
+            serializer=_morph_ser,
+            description="Erode pixels of the given zone",
+        ),
+    }
 
 
 def validate_color_range(color: int | str) -> bool:
@@ -60,15 +210,10 @@ def validate_dsl_program(program_str: str) -> bool:
         return False
     op = clean_dsl_string(program_str).split("[", 1)[0].strip()
     base_op = op.split("(", 1)[0]
-    if base_op.upper() not in {t.name for t in TransformationType} and base_op.lower() not in {
-        "mirror_tile",
-        "pattern_fill",
-        "rotate_about_point",
-        "zone_remap",
-        "dilate_zone",
-        "erode_zone",
-    }:
-        return False
+    if base_op.upper() not in {t.name for t in TransformationType}:
+        registry = get_extended_operators()
+        if base_op.lower() not in registry:
+            return False
     return True
 
 
@@ -140,7 +285,22 @@ def parse_rule(text: str) -> SymbolicRule:
         op_name, param_str = op_token.split("(", 1)
         op_name = op_name.strip()
         param_str = param_str[:-1]
-        for part in param_str.split(","):
+        parts = []
+        buf = ""
+        depth = 0
+        for ch in param_str:
+            if ch == "," and depth == 0:
+                parts.append(buf)
+                buf = ""
+                continue
+            if ch in "([{":
+                depth += 1
+            elif ch in ")]}":
+                depth -= 1
+            buf += ch
+        if buf:
+            parts.append(buf)
+        for part in parts:
             part = part.strip()
             if not part:
                 continue
@@ -157,43 +317,15 @@ def parse_rule(text: str) -> SymbolicRule:
     lower_op = op_name.lower()
     if op_name.upper() in TransformationType.__members__:
         ttype = TransformationType[op_name.upper()]
-    elif lower_op == "rotate_about_point":
-        ttype = TransformationType.ROTATE
-        pivot = params.pop("pivot", None)
-        if pivot is not None:
-            try:
-                cx, cy = [p.strip() for p in str(pivot).strip("() ").split(",")]
-                params["cx"] = cx
-                params["cy"] = cy
-            except Exception:
-                logger.warning("Malformed pivot parameter: %s", pivot)
-        angle = params.pop("angle", None)
-        if angle is not None:
-            params["angle"] = angle
-    elif lower_op in {"mirror_tile", "pattern_fill", "zone_remap", "dilate_zone", "erode_zone"}:
-        ttype = TransformationType.FUNCTIONAL
-        params = {**{k: v for k, v in params.items() if v is not None}, "op": lower_op, **{}}
-        if lower_op in {"dilate_zone", "erode_zone"}:
-            z = params.pop("zone_id", None)
-            if z is not None:
-                params["zone"] = z
-        if lower_op == "zone_remap":
-            mapping = params.pop("mapping", None)
-            if mapping is not None:
-                try:
-                    meta["mapping"] = ast.literal_eval(mapping)
-                except Exception:
-                    logger.warning("Failed to parse mapping: %s", mapping)
-                    meta["mapping"] = mapping
-        if lower_op == "pattern_fill":
-            mapping = params.pop("mapping", None)
-            if mapping is not None:
-                try:
-                    meta["mapping"] = ast.literal_eval(mapping)
-                except Exception:
-                    meta["mapping"] = mapping
     else:
-        raise ValueError(f"Unknown transformation type: {op_name}")
+        registry = get_extended_operators()
+        if lower_op in registry:
+            spec = registry[lower_op]
+            ttype = spec.ttype
+            parsed_params, meta = spec.parser(params)
+            params = {k: v for k, v in parsed_params.items() if v is not None}
+        else:
+            raise ValueError(f"Unknown transformation type: {op_name}")
 
     if "->" not in remainder:
         raise ValueError("Rule must contain '->'")
@@ -212,11 +344,11 @@ def rule_to_dsl(rule: SymbolicRule) -> str:
     op_name = rule.transformation.ttype.value
     params = dict(rule.transformation.params)
 
-    # Detect functional shorthand operators
+    registry = get_extended_operators()
     functional_op = None
     if rule.transformation.ttype is TransformationType.FUNCTIONAL:
         functional_op = params.get("op")
-    if rule.transformation.ttype is TransformationType.ROTATE and {
+    elif rule.transformation.ttype is TransformationType.ROTATE and {
         "cx",
         "cy",
         "angle",
@@ -225,51 +357,20 @@ def rule_to_dsl(rule: SymbolicRule) -> str:
 
     param_parts: list[str] = []
 
-    if functional_op == "mirror_tile":
-        op_name = "mirror_tile"
-        axis = params.get("axis")
-        repeats = params.get("repeats")
-        if axis is not None:
-            param_parts.append(f"axis={axis}")
-        if repeats is not None:
-            param_parts.append(f"repeats={repeats}")
-    elif functional_op == "pattern_fill":
-        op_name = "pattern_fill"
-        mapping = rule.meta.get("mapping") or params.get("mapping")
-        if mapping is not None:
-            if isinstance(mapping, dict):
-                items = ", ".join(f"{k}: {v}" for k, v in sorted(mapping.items()))
-                mapping_str = "{" + items + "}"
-            else:
-                mapping_str = str(mapping)
-            param_parts.append(f"mapping={mapping_str}")
-    elif functional_op == "zone_remap":
-        op_name = "zone_remap"
-        mapping = rule.meta.get("mapping") or params.get("mapping")
-        if mapping is not None:
-            if isinstance(mapping, dict):
-                items = ", ".join(f"{k}: {v}" for k, v in sorted(mapping.items()))
-                mapping_str = "{" + items + "}"
-            else:
-                mapping_str = str(mapping)
-            param_parts.append(f"mapping={mapping_str}")
-    elif functional_op in {"dilate_zone", "erode_zone"}:
+    if functional_op in registry:
+        spec = registry[functional_op]
         op_name = functional_op
-        zone = params.get("zone") or params.get("zone_id")
-        if zone is not None:
-            param_parts.append(f"zone_id={zone}")
+        param_parts.extend(spec.serializer(params, rule.meta))
     elif functional_op:
-        param_parts = [f"{k}={v}" for k, v in params.items() if k != "op"]
         op_name = functional_op
-    elif functional_op is None and rule.transformation.ttype is TransformationType.ROTATE:
-        cx = params.get("cx")
-        cy = params.get("cy")
-        angle = params.get("angle")
-        op_name = "rotate_about_point"
-        if cx is not None and cy is not None:
-            param_parts.append(f"pivot=({cx},{cy})")
-        if angle is not None:
-            param_parts.append(f"angle={angle}")
+        param_parts = [f"{k}={v}" for k, v in params.items() if k != "op"]
+    elif rule.transformation.ttype is TransformationType.ROTATE:
+        spec = registry.get("rotate_about_point")
+        if spec:
+            op_name = "rotate_about_point"
+            param_parts.extend(spec.serializer(params, rule.meta))
+        else:
+            param_parts = [f"{k}={v}" for k, v in params.items()]
     else:
         param_parts = [f"{k}={v}" for k, v in params.items()]
 
@@ -361,6 +462,8 @@ __all__ = [
     "validate_dsl_program",
     "validate_color_range",
     "clean_dsl_string",
+    "get_extended_operators",
+    "OperatorSpec",
     "CompositeRule",
     "final_targets",
 ]

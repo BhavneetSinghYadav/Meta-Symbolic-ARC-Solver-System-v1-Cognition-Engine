@@ -1,11 +1,21 @@
+import importlib.util
+from pathlib import Path
 import pytest
 
-from arc_solver.src.symbolic.rule_language import (
-    parse_rule,
-    rule_to_dsl,
-    validate_dsl_program,
-    clean_dsl_string,
+ROOT = Path(__file__).resolve().parents[2]
+module_name = "arc_solver.src.symbolic.rule_language"
+spec = importlib.util.spec_from_file_location(
+    module_name,
+    ROOT / "arc_solver" / "src" / "symbolic" / "rule_language.py",
 )
+rule_language = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rule_language)  # type: ignore
+
+parse_rule = rule_language.parse_rule
+rule_to_dsl = rule_language.rule_to_dsl
+validate_dsl_program = rule_language.validate_dsl_program
+clean_dsl_string = rule_language.clean_dsl_string
+get_extended_operators = rule_language.get_extended_operators
 from arc_solver.src.symbolic.vocabulary import SymbolicRule, TransformationType
 
 
@@ -47,6 +57,19 @@ def _roundtrip(dsl: str) -> None:
     assert rule_to_dsl(obj2) == out
     assert obj2.transformation.params == obj.transformation.params
     assert obj2.meta == obj.meta
+
+
+def test_operator_registry_keys():
+    ops = get_extended_operators()
+    expected = {
+        "mirror_tile",
+        "pattern_fill",
+        "rotate_about_point",
+        "zone_remap",
+        "dilate_zone",
+        "erode_zone",
+    }
+    assert expected <= set(ops)
 
 
 def test_extended_operator_roundtrip():

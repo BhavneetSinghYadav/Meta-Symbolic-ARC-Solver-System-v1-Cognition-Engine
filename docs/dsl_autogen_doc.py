@@ -1,6 +1,6 @@
+import importlib
 import inspect
 import pkgutil
-import importlib
 from pathlib import Path
 import sys
 
@@ -9,7 +9,23 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
-from arc_solver.src.symbolic import vocabulary
+import importlib.util
+
+vocab_spec = importlib.util.spec_from_file_location(
+    "arc_solver.src.symbolic.vocabulary",
+    Path(ROOT / "arc_solver" / "src" / "symbolic" / "vocabulary.py").as_posix(),
+)
+vocabulary = importlib.util.module_from_spec(vocab_spec)
+vocab_spec.loader.exec_module(vocabulary)  # type: ignore
+
+spec = importlib.util.spec_from_file_location(
+    "arc_solver.src.symbolic.rule_language",
+    Path(ROOT / "arc_solver" / "src" / "symbolic" / "rule_language.py").as_posix(),
+)
+rule_language = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rule_language)  # type: ignore
+get_extended_operators = rule_language.get_extended_operators
+OperatorSpec = rule_language.OperatorSpec
 
 
 def _discover_symbolic_modules():
@@ -50,6 +66,21 @@ def generate_dsl_docs(output_path: str = "docs/generated_dsl_operators.md") -> N
             desc = "TODO: add description."
         lines.append(f"## {op.name}\n")
         lines.append(f"**Syntax:** `{syntax}`\n")
+        lines.append(f"**Description:** {desc}\n")
+        lines.append("**Example:**\n")
+        lines.append("```python\n# Example coming soon\n```\n")
+
+    ext = get_extended_operators()
+    for name, spec in sorted(ext.items()):
+        syntax, desc = _find_operator_info(name, modules)
+        if syntax is None:
+            syntax = f"{name}(...)"
+        if not desc:
+            desc = spec.description or "TODO: add description."
+        lines.append(f"## {name}\n")
+        lines.append(f"**DSL Keyword:** `{name}`\n")
+        lines.append(f"**Transformation Type:** `{spec.ttype.value}`\n")
+        lines.append(f"**Parameters:** {', '.join(spec.params)}\n")
         lines.append(f"**Description:** {desc}\n")
         lines.append("**Example:**\n")
         lines.append("```python\n# Example coming soon\n```\n")
