@@ -1096,6 +1096,21 @@ def abstract(
             if score_rule(input_grid, output_grid, r) > 0.5
         ]
         valid_rules.extend(fallback_rules)
+
+    if (
+        ENABLE_FALLBACK_COMPOSITES
+        and valid_rules
+        and max(score_rule(input_grid, output_grid, r) for r in valid_rules)
+        < RELIABILITY_THRESHOLD
+    ):
+        from arc_solver.src.abstractions.rule_generator import fallback_composite_rules
+
+        comps = fallback_composite_rules(
+            valid_rules, input_grid, output_grid, score_threshold=RELIABILITY_THRESHOLD
+        )
+        fallback_rules.extend(comps)
+        valid_rules.extend(comps)
+
     if trace_entry is not None:
         trace_entry["fallback_rules_used"] = len(fallback_rules)
 
