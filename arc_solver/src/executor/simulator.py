@@ -112,7 +112,7 @@ def simulate_composite_safe(
                 failed_step_index=idx,
                 reason="grid_expansion_failure",
             )
-            raise ValidationError(
+            raise UnsafeTransformationError(
                 f"grid would expand to {forecast}, exceeding {MAX_GRID_DIM}x{MAX_GRID_DIM}"
             )
         if uncertainty_grid is not None and forecast != out.shape():

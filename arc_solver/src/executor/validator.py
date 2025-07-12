@@ -61,6 +61,7 @@ def validate_color_dependencies(
         if training_colors is not None
         else None
     )
+    explicit_color_transform = False
 
     for step in rule_chain:
         color_lineage.append(get_color_set(working))
@@ -79,6 +80,9 @@ def validate_color_dependencies(
                     except ValueError:
                         pass
             if st.transformation.ttype is TransformationType.FUNCTIONAL:
+                op = st.transformation.params.get("op")
+                if op in {"zone_remap", "pattern_fill"}:
+                    explicit_color_transform = True
                 try:
                     validate_functional_params(st, working)
                 except (InvalidParameterError, UnsafeTransformationError) as exc:
@@ -101,7 +105,29 @@ def validate_color_dependencies(
 
     final_colors = color_lineage[-1]
     missing = {c for c in required if c not in final_colors}
-    if missing and not (training_set is not None and final_colors == training_set):
+
+    if training_set is not None and final_colors != training_set and not explicit_color_transform:
+        divergence = None
+        for i in range(len(color_lineage) - 1):
+            if color_lineage[i] != color_lineage[i + 1]:
+                divergence = i
+                break
+        log_failure(
+            task_id=task_id,
+            rule_id=rule_id or "chain",
+            rule_type="composite",
+            rule_steps=[str(s) for s in rule_chain],
+            rejection_stage="validation",
+            failed_step_index=divergence,
+            reason="training_color_mismatch",
+            color_lineage=color_lineage,
+            intermediate_grids=intermediate_grids,
+        )
+        return False
+
+    if missing and not (
+        (training_set is not None and final_colors == training_set) or explicit_color_transform
+    ):
         divergence = None
         for i in range(len(color_lineage) - 1):
             before = color_lineage[i]
