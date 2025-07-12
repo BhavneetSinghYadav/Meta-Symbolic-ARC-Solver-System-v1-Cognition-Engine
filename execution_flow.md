@@ -68,3 +68,12 @@ When a rule is rejected or fails during simulation, a JSON entry is appended to 
 {"task_id": "00576224", "rule_id": "REPEAT -> REPLACE", "rejection_stage": "validation", "failed_step_index": 0, "reason": "missing_color", "color_lineage": [[1,2]], "intermediate_grids": [[[1,2],[2,1]]]}
 ```
 
+## Operator Simulation
+
+`_apply_functional` handles symbolic operators such as `mirror_tile`, `draw_line`,
+`pattern_fill`, `zone_remap`, `dilate_zone`, `erode_zone` and `rotate_about_point`.
+Each branch verifies required parameters before invoking the corresponding helper
+from `arc_solver.src.symbolic`. If a helper fails, the original grid is returned
+so simulation continues safely. Currently only 90° rotations are supported and
+lines are drawn 4‑connected with a thickness of one cell.
+

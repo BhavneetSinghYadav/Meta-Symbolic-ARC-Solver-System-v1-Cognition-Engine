@@ -853,15 +853,18 @@ def _apply_functional(
 
         # === EXTENDED_OPERATOR_EXECUTION ===
         case "mirror_tile":
-            axis = rule.transformation.params.get("axis", "horizontal")
+            axis = rule.transformation.params.get("axis")
+            repeats_raw = rule.transformation.params.get("repeats")
+            if axis is None:
+                raise ValueError(f"Missing param axis for op {op}")
+            if repeats_raw is None:
+                raise ValueError(f"Missing param repeats for op {op}")
             try:
-                repeats = int(rule.transformation.params.get("repeats", "1"))
+                repeats = int(repeats_raw)
             except Exception as exc:
                 raise RuleExecutionError(rule, f"invalid repeats: {exc}") from exc
             try:
-                logger.debug(
-                    "mirror_tile axis=%s repeats=%s", axis, repeats
-                )
+                logger.debug("mirror_tile axis=%s repeats=%s", axis, repeats)
                 result = mirror_tile(grid, axis, repeats)
                 logger.debug("mirror_tile result size=%s", result.shape())
                 return result
@@ -871,8 +874,10 @@ def _apply_functional(
         case "pattern_fill":
             mask = getattr(rule, "meta", {}).get("mask")
             pattern = getattr(rule, "meta", {}).get("pattern")
-            if mask is None or pattern is None:
-                raise RuleExecutionError(rule, "missing mask or pattern")
+            if mask is None:
+                raise ValueError(f"Missing param mask for op {op}")
+            if pattern is None:
+                raise ValueError(f"Missing param pattern for op {op}")
             try:
                 logger.debug("pattern_fill execution")
                 result = pattern_fill(grid, mask, pattern)
@@ -882,10 +887,17 @@ def _apply_functional(
                 raise RuleExecutionError(rule, str(exc)) from exc
 
         case "draw_line":
+            p1_raw = rule.transformation.params.get("p1")
+            p2_raw = rule.transformation.params.get("p2")
+            color_raw = rule.transformation.params.get("color")
+            if p1_raw is None:
+                raise ValueError(f"Missing param p1 for op {op}")
+            if p2_raw is None:
+                raise ValueError(f"Missing param p2 for op {op}")
+            if color_raw is None:
+                raise ValueError(f"Missing param color for op {op}")
             try:
-                p1_raw = rule.transformation.params.get("p1")
-                p2_raw = rule.transformation.params.get("p2")
-                color = int(rule.transformation.params.get("color", "0"))
+                color = int(color_raw)
                 p1 = tuple(int(x) for x in str(p1_raw).strip("() ").split(","))
                 p2 = tuple(int(x) for x in str(p2_raw).strip("() ").split(","))
             except Exception as exc:
@@ -904,16 +916,23 @@ def _apply_functional(
             if pivot_raw is not None:
                 try:
                     cx, cy = [int(x) for x in str(pivot_raw).strip("() ").split(",")]
-                except Exception as exc:  # noqa: PERF203 - simple validation
-                    raise RuleExecutionError(rule, f"invalid pivot: {exc}") from exc
-            else:
-                try:
-                    cx = int(rule.transformation.params.get("cx", "0"))
-                    cy = int(rule.transformation.params.get("cy", "0"))
                 except Exception as exc:
                     raise RuleExecutionError(rule, f"invalid pivot: {exc}") from exc
+            else:
+                cx_raw = rule.transformation.params.get("cx")
+                cy_raw = rule.transformation.params.get("cy")
+                if cx_raw is None or cy_raw is None:
+                    raise ValueError(f"Missing param pivot for op {op}")
+                try:
+                    cx = int(cx_raw)
+                    cy = int(cy_raw)
+                except Exception as exc:
+                    raise RuleExecutionError(rule, f"invalid pivot: {exc}") from exc
+            angle_raw = rule.transformation.params.get("angle")
+            if angle_raw is None:
+                raise ValueError(f"Missing param angle for op {op}")
             try:
-                angle = int(rule.transformation.params.get("angle", "0"))
+                angle = int(angle_raw)
             except Exception as exc:
                 raise RuleExecutionError(rule, f"invalid angle: {exc}") from exc
             h, w = grid.shape()
@@ -931,8 +950,10 @@ def _apply_functional(
 
         case "dilate_zone":
             zone_val = rule.transformation.params.get("zone")
+            if zone_val is None:
+                raise ValueError(f"Missing param zone for op {op}")
             try:
-                zone_id = int(zone_val) if zone_val is not None else None
+                zone_id = int(zone_val)
             except Exception:
                 zone_id = zone_val
             try:
@@ -947,8 +968,10 @@ def _apply_functional(
 
         case "erode_zone":
             zone_val = rule.transformation.params.get("zone")
+            if zone_val is None:
+                raise ValueError(f"Missing param zone for op {op}")
             try:
-                zone_id = int(zone_val) if zone_val is not None else None
+                zone_id = int(zone_val)
             except Exception:
                 zone_id = zone_val
             try:
@@ -963,6 +986,8 @@ def _apply_functional(
 
         case "zone_remap":
             mapping = getattr(rule, "meta", {}).get("mapping")
+            if mapping is None:
+                raise ValueError(f"Missing param mapping for op {op}")
             if not isinstance(mapping, dict):
                 raise RuleExecutionError(rule, "missing mapping")
             try:
