@@ -126,9 +126,20 @@ def run(bundle: str, task_id: str) -> None:
 
 def _cli() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task_id", required=True)
-    parser.add_argument("--bundle", required=True)
+    parser.add_argument("command", nargs="?", default="run")
+    parser.add_argument("--task_id")
+    parser.add_argument("--bundle")
     args = parser.parse_args()
+
+    if args.command == "validate-dsl-integrity":
+        from arc_solver.tools.validate_dsl_integrity import validate_dsl_integrity
+
+        validate_dsl_integrity()
+        return
+
+    if not args.task_id or not args.bundle:
+        parser.error("--task_id and --bundle required for run")
+
     run(args.bundle, args.task_id)
 
 
