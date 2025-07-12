@@ -44,15 +44,7 @@ from arc_solver.src.executor.dependency import (
 from arc_solver.src.utils.grid_utils import validate_grid
 
 # === EXTENDED_OPERATOR_EXECUTION ===
-from arc_solver.src.symbolic.operators import mirror_tile
-from arc_solver.src.symbolic.pattern_fill_operator import pattern_fill
-from arc_solver.src.symbolic.draw_line import draw_line
-try:
-    from arc_solver.src.symbolic.morphology_ops import dilate_zone, erode_zone
-except Exception:  # pragma: no cover - optional dependency
-    dilate_zone = erode_zone = None  # type: ignore
-from arc_solver.src.symbolic.zone_remap import zone_remap
-from arc_solver.src.symbolic.rotate_about_point import rotate_about_point
+from arc_solver.src.executor.functional_ops import FUNCTIONAL_OPS
 from arc_solver.src.segment.segmenter import label_connected_regions, zone_overlay
 
 
@@ -702,16 +694,23 @@ def _apply_rotate(
     grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
 ) -> Grid:
     """Rotate the grid about a specific point by a multiple of 90 degrees."""
-    try:
-        cx = int(rule.transformation.params.get("cx", "0"))
-        cy = int(rule.transformation.params.get("cy", "0"))
-        angle = int(rule.transformation.params.get("angle", "0"))
-    except Exception as exc:
-        log_rule_failure(rule, failure_type="ROTATE", message="invalid parameters")
+    params = dict(rule.transformation.params)
+    op = FUNCTIONAL_OPS.get("rotate_about_point")
+    if op is None:
         return grid
     try:
-        logger.debug("rotate_about_point cx=%s cy=%s angle=%s", cx, cy, angle)
-        return rotate_about_point(grid, (cx, cy), angle)
+        op.validate_params(grid, params)
+    except Exception as exc:
+        log_rule_failure(rule, failure_type="ROTATE", message=str(exc))
+        return grid
+    try:
+        logger.debug(
+            "rotate_about_point cx=%s cy=%s angle=%s",
+            params.get("cx"),
+            params.get("cy"),
+            params.get("angle"),
+        )
+        return op.simulate(grid, params)
     except Exception as exc:
         raise RuleExecutionError(rule, str(exc)) from exc
 
@@ -840,9 +839,9 @@ def _apply_region(
 def _apply_functional(
     grid: Grid, rule: SymbolicRule, attention_mask: Optional[List[List[bool]]] = None
 ) -> Grid:
-    op = rule.transformation.params.get("op")
+    op_name = rule.transformation.params.get("op")
 
-    match op:
+    match op_name:
         case "invert_diagonal":
             h, w = grid.shape()
             new_data = [row[:] for row in grid.data]
@@ -859,162 +858,22 @@ def _apply_functional(
         case "flip_horizontal":
             return grid.flip_horizontal()
 
-        # === EXTENDED_OPERATOR_EXECUTION ===
-        case "mirror_tile":
-            axis = rule.transformation.params.get("axis")
-            repeats_raw = rule.transformation.params.get("repeats")
-            if axis is None:
-                raise ValueError(f"Missing param axis for op {op}")
-            if repeats_raw is None:
-                raise ValueError(f"Missing param repeats for op {op}")
-            try:
-                repeats = int(repeats_raw)
-            except Exception as exc:
-                raise RuleExecutionError(rule, f"invalid repeats: {exc}") from exc
-            try:
-                logger.debug("mirror_tile axis=%s repeats=%s", axis, repeats)
-                result = mirror_tile(grid, axis, repeats)
-                logger.debug("mirror_tile result size=%s", result.shape())
-                return result
-            except Exception as exc:
-                raise RuleExecutionError(rule, str(exc)) from exc
-
-        case "pattern_fill":
-            mask = getattr(rule, "meta", {}).get("mask")
-            pattern = getattr(rule, "meta", {}).get("pattern")
-            if mask is None:
-                raise ValueError(f"Missing param mask for op {op}")
-            if pattern is None:
-                raise ValueError(f"Missing param pattern for op {op}")
-            try:
-                logger.debug("pattern_fill execution")
-                result = pattern_fill(grid, mask, pattern)
-                logger.debug("pattern_fill result size=%s", result.shape())
-                return result
-            except Exception as exc:
-                raise RuleExecutionError(rule, str(exc)) from exc
-
-        case "draw_line":
-            p1_raw = rule.transformation.params.get("p1")
-            p2_raw = rule.transformation.params.get("p2")
-            color_raw = rule.transformation.params.get("color")
-            if p1_raw is None:
-                raise ValueError(f"Missing param p1 for op {op}")
-            if p2_raw is None:
-                raise ValueError(f"Missing param p2 for op {op}")
-            if color_raw is None:
-                raise ValueError(f"Missing param color for op {op}")
-            try:
-                color = int(color_raw)
-                p1 = tuple(int(x) for x in str(p1_raw).strip("() ").split(","))
-                p2 = tuple(int(x) for x in str(p2_raw).strip("() ").split(","))
-            except Exception as exc:
-                raise RuleExecutionError(rule, f"invalid parameters: {exc}") from exc
-            try:
-                logger.debug("draw_line p1=%s p2=%s color=%s", p1, p2, color)
-                base = grid.to_list() if hasattr(grid, "to_list") else grid
-                raw = draw_line(base, p1, p2, color)
-                result = Grid(raw if isinstance(raw, list) else raw.tolist())
-                logger.debug("draw_line result size=%s", result.shape())
-                return result
-            except Exception as exc:
-                raise RuleExecutionError(rule, str(exc)) from exc
-
-        case "rotate_about_point":
-            pivot_raw = rule.transformation.params.get("pivot")
-            cx = cy = None
-            if pivot_raw is not None:
-                try:
-                    cx, cy = [int(x) for x in str(pivot_raw).strip("() ").split(",")]
-                except Exception as exc:
-                    raise RuleExecutionError(rule, f"invalid pivot: {exc}") from exc
-            else:
-                cx_raw = rule.transformation.params.get("cx")
-                cy_raw = rule.transformation.params.get("cy")
-                if cx_raw is None or cy_raw is None:
-                    raise ValueError(f"Missing param pivot for op {op}")
-                try:
-                    cx = int(cx_raw)
-                    cy = int(cy_raw)
-                except Exception as exc:
-                    raise RuleExecutionError(rule, f"invalid pivot: {exc}") from exc
-            angle_raw = rule.transformation.params.get("angle")
-            if angle_raw is None:
-                raise ValueError(f"Missing param angle for op {op}")
-            try:
-                angle = int(angle_raw)
-            except Exception as exc:
-                raise RuleExecutionError(rule, f"invalid angle: {exc}") from exc
-            h, w = grid.shape()
-            if not (0 <= cx < h and 0 <= cy < w):
-                raise RuleExecutionError(rule, "pivot out of bounds")
-            try:
-                logger.debug(
-                    "rotate_about_point pivot=(%s,%s) angle=%s", cx, cy, angle
-                )
-                result = rotate_about_point(grid, (cx, cy), angle)
-                logger.debug("rotate_about_point result size=%s", result.shape())
-                return result
-            except Exception as exc:
-                raise RuleExecutionError(rule, str(exc)) from exc
-
-        case "dilate_zone":
-            zone_val = rule.transformation.params.get("zone")
-            if zone_val is None:
-                raise ValueError(f"Missing param zone for op {op}")
-            try:
-                zone_id = int(zone_val)
-            except Exception:
-                zone_id = zone_val
-            try:
-                overlay = label_connected_regions(grid)
-                logger.debug("dilate_zone id=%s", zone_id)
-                new = dilate_zone(grid.to_list(), zone_id, overlay)
-                result = Grid(new if isinstance(new, list) else new.tolist())
-                logger.debug("dilate_zone result size=%s", result.shape())
-                return result
-            except Exception as exc:
-                raise RuleExecutionError(rule, str(exc)) from exc
-
-        case "erode_zone":
-            zone_val = rule.transformation.params.get("zone")
-            if zone_val is None:
-                raise ValueError(f"Missing param zone for op {op}")
-            try:
-                zone_id = int(zone_val)
-            except Exception:
-                zone_id = zone_val
-            try:
-                overlay = label_connected_regions(grid)
-                logger.debug("erode_zone id=%s", zone_id)
-                new = erode_zone(grid.to_list(), zone_id, overlay)
-                result = Grid(new if isinstance(new, list) else new.tolist())
-                logger.debug("erode_zone result size=%s", result.shape())
-                return result
-            except Exception as exc:
-                raise RuleExecutionError(rule, str(exc)) from exc
-
-        case "zone_remap":
-            mapping = getattr(rule, "meta", {}).get("mapping")
-            if mapping is None:
-                raise ValueError(f"Missing param mapping for op {op}")
-            if not isinstance(mapping, dict):
-                raise RuleExecutionError(rule, "missing mapping")
-            try:
-                overlay = _cached_zone_overlay(grid)
-                logger.debug("zone_remap mapping=%s", mapping)
-                new_grid = zone_remap(grid.to_list(), overlay, mapping)
-                result = Grid(new_grid)
-                logger.debug("zone_remap result size=%s", result.shape())
-                return result
-            except Exception as exc:
-                raise RuleExecutionError(rule, str(exc)) from exc
-
         case _:
-            log_rule_failure(
-                rule, failure_type="FUNCTIONAL", message=f"unknown op {op}"
-            )
-            return grid
+            params = {**rule.transformation.params, **(getattr(rule, "meta", {}) or {})}
+            wrapper = FUNCTIONAL_OPS.get(op_name)
+            if wrapper is None:
+                log_rule_failure(
+                    rule, failure_type="FUNCTIONAL", message=f"unknown op {op_name}"
+                )
+                return grid
+            try:
+                wrapper.validate_params(grid, params)
+            except Exception as exc:
+                raise RuleExecutionError(rule, str(exc)) from exc
+            try:
+                return wrapper.simulate(grid, params)
+            except Exception as exc:
+                raise RuleExecutionError(rule, str(exc)) from exc
 
 
 def safe_apply_rule(

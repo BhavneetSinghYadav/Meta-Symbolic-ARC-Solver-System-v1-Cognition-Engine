@@ -33,10 +33,26 @@ def validate_functional_params(rule: SymbolicRule, grid: Grid) -> None:
     """Validate parameters for functional ``rule`` relative to ``grid``."""
 
     if rule.transformation.ttype is not TransformationType.FUNCTIONAL:
+        # rotate_about_point is encoded as ROTATE but treated like a functional op
+        if rule.transformation.ttype is TransformationType.ROTATE and {
+            "cx",
+            "cy",
+            "angle",
+        }.issubset(rule.transformation.params):
+            op = "rotate_about_point"
+        else:
+            return
+    else:
+        op = rule.transformation.params.get("op")
+
+    from arc_solver.src.executor.functional_ops import FUNCTIONAL_OPS
+
+    params = {**rule.transformation.params, **(getattr(rule, "meta", {}) or {})}
+    wrapper = FUNCTIONAL_OPS.get(op)
+    if wrapper is not None:
+        wrapper.validate_params(grid, params)
         return
 
-    op = rule.transformation.params.get("op")
-    params = rule.transformation.params
     meta: Dict[str, Any] = getattr(rule, "meta", {})
 
     if op == "rotate_about_point":
