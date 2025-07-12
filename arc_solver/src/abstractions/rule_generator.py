@@ -117,7 +117,12 @@ def remove_duplicate_rules(
         return _sig(getattr(r, "meta", {}))
 
     for rule in rules:
-        sig = normalize_rule_dsl(rule_to_dsl(rule)) + _meta_signature(rule)
+        if isinstance(rule, CompositeRule):
+            proxy = rule.as_symbolic_proxy()
+            sig_dsl = rule_to_dsl(proxy)
+        else:
+            sig_dsl = rule_to_dsl(rule)
+        sig = normalize_rule_dsl(sig_dsl) + _meta_signature(rule)
         h = hash(sig)
         if h not in seen_hashes:
             deduped.append(rule)
