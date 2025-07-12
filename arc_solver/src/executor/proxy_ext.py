@@ -42,7 +42,7 @@ def merge_zones(steps) -> list[str]:
     return sorted(merged)
 
 
-def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
+def as_symbolic_proxy(rule: CompositeRule | SymbolicRule) -> SymbolicRule:
     """Return a proxy rule describing ``rule`` for dependency sorting.
 
     The proxy exposes aggregated zone metadata alongside a ``zone_chain``
@@ -53,16 +53,29 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
     their zone parameters so spatial dependencies are preserved.
     """
 
-    cond: dict[str, Any] = rule.get_condition() or {}
+    if isinstance(rule, CompositeRule):
+        cond: dict[str, Any] = rule.get_condition() or {}
 
-    last_step = rule.steps[-1]
-    proxy = SymbolicRule(
-        transformation=last_step.transformation,
-        source=rule.steps[0].source,
-        target=rule.final_targets(),
-        condition=cond,
-        nature=rule.nature,
-    )
+        last_step = rule.steps[-1]
+        proxy = SymbolicRule(
+            transformation=last_step.transformation,
+            source=rule.steps[0].source,
+            target=rule.final_targets(),
+            condition=cond,
+            nature=rule.nature,
+        )
+        steps = rule.steps
+    else:
+        cond = dict(getattr(rule, "condition", {}) or {})
+        proxy = SymbolicRule(
+            transformation=rule.transformation,
+            source=rule.source,
+            target=rule.target,
+            condition=cond,
+            nature=rule.nature,
+            meta=dict(getattr(rule, "meta", {}) or {}),
+        )
+        steps = [rule]
 
     zone_chain: List[Tuple[str | None, str | None]] = []
     zone_scopes: List[Tuple[List[str], List[str]]] = []
@@ -75,7 +88,7 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
             return [val]
         return list(val)
 
-    for step in rule.steps:
+    for step in steps:
         meta = dict(getattr(step, "meta", {}) or {})
         cond = getattr(step, "condition", None) or {}
 
@@ -121,7 +134,7 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
 
     proxy.meta["input_zones"] = merged_zones
     proxy.meta["output_zones"] = merged_zones
-    proxy.meta["step_count"] = len(rule.steps)
+    proxy.meta["step_count"] = len(steps)
     proxy.meta["zone_chain"] = zone_chain
     proxy.meta["zone_scope_chain"] = zone_scopes
     proxy.meta["pivot_chain"] = pivot_chain
