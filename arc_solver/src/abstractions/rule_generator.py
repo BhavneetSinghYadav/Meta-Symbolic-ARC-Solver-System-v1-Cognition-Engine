@@ -19,7 +19,26 @@ def generalize_rules(
     For now the generalization step simply removes duplicate rules while
     preserving order.
     """
-    unique = remove_duplicate_rules(rules)
+    # Attach operator metadata for functional rules so that deduplication
+    # distinguishes different operations.  ``rule_to_dsl`` does not encode
+    # transformation parameters, therefore we record the functional operator
+    # name in ``meta`` before deduplicating.
+    enriched: List[SymbolicRule | CompositeRule] = []
+    for rule in rules:
+        if isinstance(rule, CompositeRule):
+            for step in rule.steps:
+                if step.transformation.ttype is TransformationType.FUNCTIONAL:
+                    op = step.transformation.params.get("op")
+                    if op:
+                        step.meta.setdefault("op", op)
+        else:
+            if rule.transformation.ttype is TransformationType.FUNCTIONAL:
+                op = rule.transformation.params.get("op")
+                if op:
+                    rule.meta.setdefault("op", op)
+        enriched.append(rule)
+
+    unique = remove_duplicate_rules(enriched)
     if config_loader.SPARSE_MODE:
         unique.sort(key=rule_cost)
     return unique
