@@ -381,8 +381,8 @@ EXTENDED_OPERATORS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def get_extended_operators() -> Dict[str, Dict[str, Any]]:
-    """Return registry of extended symbolic operators."""
+def get_extended_operators() -> Dict[str, Callable[..., SymbolicRule]]:
+    """Return mapping of operator names to rule factory functions."""
 
-    return EXTENDED_OPERATORS
+    return {name: spec["rule"] for name, spec in EXTENDED_OPERATORS.items()}
 

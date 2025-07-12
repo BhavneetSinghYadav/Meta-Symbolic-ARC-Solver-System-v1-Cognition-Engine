@@ -154,6 +154,25 @@ def get_extended_operators() -> Dict[str, OperatorSpec]:
             serializer=_rotate_ser,
             description="Rotate the grid around a pivot point",
         ),
+        "draw_line": OperatorSpec(
+            ttype=TransformationType.FUNCTIONAL,
+            params=["p1", "p2", "color"],
+            parser=lambda p: (
+                {
+                    "op": "draw_line",
+                    "p1": p.get("p1", "(0,0)"),
+                    "p2": p.get("p2", "(1,1)"),
+                    "color": p.get("color", "1"),
+                },
+                {},
+            ),
+            serializer=lambda params, meta: [
+                f"p1={params.get('p1')}",
+                f"p2={params.get('p2')}",
+                f"color={params.get('color')}",
+            ],
+            description="Draw a straight line between two points",
+        ),
         "zone_remap": OperatorSpec(
             ttype=TransformationType.FUNCTIONAL,
             params=["mapping"],
@@ -276,7 +295,18 @@ def parse_rule(text: str) -> SymbolicRule:
     if "[" not in text or "]" not in text:
         raise ValueError("Invalid rule format")
 
-    idx = text.index("[")
+    idx = None
+    depth = 0
+    for i, ch in enumerate(text):
+        if ch == "[" and depth == 0:
+            idx = i
+            break
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+    if idx is None:
+        raise ValueError("Invalid rule format")
     op_token = text[:idx].strip()
     remainder = text[idx:].lstrip()
 
@@ -332,10 +362,27 @@ def parse_rule(text: str) -> SymbolicRule:
 
     left_str, right_str = [part.strip() for part in remainder.split("->", 1)]
     left_syms = _parse_symbol_list(left_str)
+
+    nature = None
+    if right_str.count("[") > 1:
+        idx = right_str.rfind("[")
+        nature_token = right_str[idx + 1 : -1].strip()
+        right_str = right_str[:idx].strip()
+        try:
+            nature = TransformationNature[nature_token]
+        except Exception:
+            nature = None
+
     right_syms = _parse_symbol_list(right_str)
 
     transformation = Transformation(ttype, params={k: str(v) for k, v in params.items()})
-    return SymbolicRule(transformation=transformation, source=left_syms, target=right_syms, meta=meta)
+    return SymbolicRule(
+        transformation=transformation,
+        source=left_syms,
+        target=right_syms,
+        nature=nature,
+        meta=meta,
+    )
 
 
 def rule_to_dsl(rule: SymbolicRule) -> str:
