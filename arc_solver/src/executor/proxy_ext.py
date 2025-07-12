@@ -10,6 +10,7 @@ from arc_solver.src.symbolic.vocabulary import (
     Symbol,
     TransformationType,
 )
+from arc_solver.src.executor.functional_ops import FUNCTIONAL_OPS
 
 
 def merge_zones(steps) -> list[str]:
@@ -94,23 +95,16 @@ def as_symbolic_proxy(rule: CompositeRule | SymbolicRule) -> SymbolicRule:
 
         if step.transformation.ttype is TransformationType.FUNCTIONAL:
             op = step.transformation.params.get("op")
-            if op in {"dilate_zone", "erode_zone"}:
-                z = step.transformation.params.get("zone")
-                if z is not None:
-                    val = str(z)
-                    meta.setdefault("input_zones", [val])
-                    meta.setdefault("output_zones", [val])
-            elif op == "zone_remap":
-                mapping = step.transformation.params.get("map") or meta.get("mapping")
-                if isinstance(mapping, dict):
-                    zones = [str(k) for k in mapping.keys()]
-                    meta.setdefault("input_zones", zones)
-                    meta.setdefault("output_zones", zones)
+            params = {**step.transformation.params, **meta}
+            wrapper = FUNCTIONAL_OPS.get(op)
+            if wrapper:
+                meta.update(wrapper.proxy_meta(params))
         elif step.transformation.ttype is TransformationType.ROTATE:
-            cx = step.transformation.params.get("cx")
-            cy = step.transformation.params.get("cy")
-            if cx is not None and cy is not None:
-                meta.setdefault("pivot", f"{cx},{cy}")
+            params = step.transformation.params
+            if {"cx", "cy", "angle"}.issubset(params):
+                wrapper = FUNCTIONAL_OPS.get("rotate_about_point")
+                if wrapper:
+                    meta.update(wrapper.proxy_meta(params))
 
         in_list = _to_list(meta.get("input_zones"))
         out_list = _to_list(meta.get("output_zones"))
