@@ -80,3 +80,27 @@ def test_training_color_override_accept():
         training_colors={2},
         lineage_tracker=tracker,
     )
+
+
+def test_training_color_mismatch_allowed_by_zone_remap():
+    grid = Grid([[1]])
+    rule = SymbolicRule(
+        transformation=Transformation(TransformationType.FUNCTIONAL, params={"op": "zone_remap"}),
+        source=[Symbol(SymbolType.REGION, "All")],
+        target=[Symbol(SymbolType.REGION, "All")],
+        meta={"mapping": {0: 2}},
+    )
+    comp = CompositeRule([rule])
+    assert validate_color_dependencies([comp], grid, training_colors={1})
+
+
+def test_training_color_mismatch_without_transform_fails():
+    grid = Grid([[1]])
+    rule = SymbolicRule(
+        transformation=Transformation(TransformationType.REPLACE),
+        source=[Symbol(SymbolType.COLOR, "1")],
+        target=[Symbol(SymbolType.COLOR, "2")],
+    )
+    comp = CompositeRule([rule])
+    assert not validate_color_dependencies([comp], grid, training_colors={1})
+
