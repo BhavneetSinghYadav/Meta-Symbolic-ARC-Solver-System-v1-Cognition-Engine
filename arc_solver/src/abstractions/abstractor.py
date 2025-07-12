@@ -43,6 +43,7 @@ from arc_solver.src.symbolic.generators import (
     generate_morph_remap_composites,
     generate_pattern_fill_rules,
 )
+from arc_solver.src.abstractions.zone_shape_auto_discover import auto_discover_rules
 from arc_solver.src.abstractions.rule_generator import generate_all_rules
 from arc_solver.src.utils.logger import get_logger
 
@@ -1135,6 +1136,13 @@ def abstract(
 
     if other_pairs:
         retest_rules_on_pairs(valid_rules, other_pairs)
+
+    if not valid_rules:
+        try:
+            discovered = auto_discover_rules("unknown", input_grid, output_grid, {})
+            valid_rules.extend(discovered)
+        except Exception:
+            pass
 
     for r in valid_rules:
         if not hasattr(r, "dsl_str"):
