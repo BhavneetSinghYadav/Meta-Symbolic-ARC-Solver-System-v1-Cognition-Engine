@@ -272,7 +272,14 @@ def score_rule(
     else:
         bonus = 0.0
 
-    final = base - penalty + bonus
+    # Small diversity penalty when metadata encodes many variants
+    diversity_penalty = 0.0
+    meta = getattr(rule, "meta", {})
+    if any(isinstance(v, list) for v in meta.values()):
+        width = sum(len(v) if isinstance(v, list) else 1 for v in meta.values())
+        diversity_penalty = 0.02 * max(0, width - len(meta) - 2)
+
+    final = base - penalty - diversity_penalty + bonus
 
     # === Zone-Aware Scoring Hooks  ===
     if ENABLE_ZONE_SCORING:

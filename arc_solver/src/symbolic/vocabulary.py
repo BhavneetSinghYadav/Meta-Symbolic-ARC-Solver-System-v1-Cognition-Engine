@@ -187,6 +187,46 @@ class SymbolicRule:
 
         return safe_apply_rule(self, grid, perform_checks=False)
 
+    @property
+    def dsl(self) -> str:
+        """Return DSL representation of this rule."""
+        from arc_solver.src.symbolic.rule_language import rule_to_dsl
+
+        if hasattr(self, "dsl_str") and isinstance(self.dsl_str, str):
+            return self.dsl_str
+        dsl = rule_to_dsl(self)
+        self.dsl_str = dsl
+        return dsl
+
+    def generalize_with(self, other: "SymbolicRule") -> "SymbolicRule | None":
+        """Return merged rule if ``other`` shares this rule's DSL."""
+
+        if self.dsl != other.dsl:
+            return None
+
+        merged_meta: Dict[str, Any] = {}
+        keys = set(self.meta) | set(other.meta)
+        for k in keys:
+            v1 = self.meta.get(k)
+            v2 = other.meta.get(k)
+            if v1 is None:
+                merged_meta[k] = v2
+            elif v2 is None or v1 == v2:
+                merged_meta[k] = v1
+            else:
+                merged_meta[k] = [v1, v2]
+
+        merged = SymbolicRule(
+            transformation=self.transformation,
+            source=self.source,
+            target=self.target,
+            nature=self.nature,
+            condition=dict(self.condition),
+            meta=merged_meta,
+        )
+        merged.dsl_str = self.dsl
+        return merged
+
     def triggers_large_conflict(
         self, conflict_map: list[list[int]], radius: int = 2
     ) -> bool:
