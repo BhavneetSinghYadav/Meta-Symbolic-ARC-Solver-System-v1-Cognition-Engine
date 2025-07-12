@@ -10,6 +10,8 @@ perfect composites to encourage valid chains.
 """
 
 from typing import Any, Dict, List, Tuple
+import math
+from collections import Counter
 
 from arc_solver.src.core.grid import Grid
 from arc_solver.src.executor.simulator import simulate_rules
@@ -35,7 +37,7 @@ SCORE_FAILURE_THRESHOLD = 0.2
 ENABLE_ZONE_SCORING = False
 
 # Relative weights for each transformation type when computing structural cost.
-OP_WEIGHTS: Dict[TransformationType, float] = {
+OP_WEIGHTS: Dict[Any, float] = {
     TransformationType.REPLACE: 1.0,
     TransformationType.TRANSLATE: 1.0,
     TransformationType.MERGE: 1.1,
@@ -52,7 +54,42 @@ OP_WEIGHTS: Dict[TransformationType, float] = {
     # should have a higher cost than basic logical transformations.
     TransformationType.FUNCTIONAL: 1.4,
     TransformationType.COMPOSITE: 1.0,
+    # Functional operator specifics
+    "mirror_tile": 4.0,
+    "draw_line": 3.0,
+    "dilate_zone": 2.5,
+    "erode_zone": 2.5,
+    "rotate_about_point": 4.0,
+    "zone_remap": 1.5,
 }
+
+
+def grid_color_entropy(grid: Grid) -> float:
+    """Return normalized color entropy of ``grid``."""
+
+    counts: Counter[int] = Counter()
+    total = 0
+    for row in grid.data:
+        for val in row:
+            if val <= 0:
+                continue
+            counts[val] += 1
+            total += 1
+
+    if total == 0:
+        return 0.0
+
+    n_colors = len(counts)
+    if n_colors <= 1:
+        return 0.0
+
+    ent = 0.0
+    for c in counts.values():
+        p = c / total
+        ent -= p * math.log2(p)
+
+    max_ent = math.log2(n_colors)
+    return ent / max_ent if max_ent else 0.0
 
 
 def _shape_delta(input_grid: Grid, output_grid: Grid) -> str:
@@ -90,21 +127,39 @@ def _unique_ops(rule: SymbolicRule | CompositeRule) -> int:
     return 1
 
 
+def _op_name(rule: SymbolicRule) -> str | TransformationType:
+    """Return canonical operator identifier for ``rule``."""
+
+    t = rule.transformation.ttype
+    if t is TransformationType.FUNCTIONAL:
+        return rule.transformation.params.get("op", t)
+    if t is TransformationType.ROTATE and {
+        "cx",
+        "cy",
+        "angle",
+    }.issubset(rule.transformation.params):
+        return "rotate_about_point"
+    return t
+
+
 def _op_cost(rule: SymbolicRule | CompositeRule) -> float:
     """Return weighted cost of unique operations used by ``rule``."""
 
     if isinstance(rule, CompositeRule):
-        ops = {step.transformation.ttype for step in rule.steps}
-    elif rule.transformation.ttype is TransformationType.COMPOSITE:
-        step_names = rule.transformation.params.get("steps", [])
-        ops = {TransformationType[s] if isinstance(s, str) else s for s in step_names}
+        ops = {_op_name(step) for step in rule.steps}
     else:
-        ops = {rule.transformation.ttype}
+        ops = {_op_name(rule)}
 
     if not ops:
         return 0.0
 
-    return float(sum(OP_WEIGHTS.get(op, 1.0) for op in ops))
+    cost = 0.0
+    for op in ops:
+        if isinstance(op, TransformationType):
+            cost += OP_WEIGHTS.get(op, 1.0)
+        else:
+            cost += OP_WEIGHTS.get(op, OP_WEIGHTS.get(TransformationType.FUNCTIONAL, 1.0))
+    return float(cost)
 
 
 def _extract_zones(rule: SymbolicRule | CompositeRule) -> List[str]:
@@ -133,6 +188,16 @@ def _extract_zones(rule: SymbolicRule | CompositeRule) -> List[str]:
         _gather(getattr(rule, "meta", None) or {})
 
     return sorted(zones)
+
+
+def op_penalty(rule: SymbolicRule | CompositeRule) -> float:
+    """Return nonlinear penalty for ``rule`` based on its operation cost."""
+
+    cost = _op_cost(rule)
+    # Saturating penalty curve to avoid excessive punishment for long yet
+    # precise programs.  Scales with ``tanh`` so that heavy chains converge
+    # towards a constant penalty.
+    return 0.03 * math.tanh(cost / 5.0)
 
 
 def score_rule(
@@ -171,11 +236,31 @@ def score_rule(
     if improvement > 0:
         base += 0.25 * improvement
 
-    # Complexity penalty weighted by unique operation types
-    penalty = 0.006 * _op_cost(rule)
+    # Complexity penalty uses a nonlinear saturation curve
+    penalty = op_penalty(rule)
 
-    # Composite bonus only when the rule perfectly matches the output
-    bonus = 0.2 if isinstance(rule, CompositeRule) and base >= 0.95 else 0.0
+    # Entropy penalty discourages rules that create high chaos without
+    # improving coverage
+    ent_pred = grid_color_entropy(pred)
+    ent_target = grid_color_entropy(output_grid)
+    if ent_pred > ent_target and improvement <= 0:
+        penalty += 0.05 * (ent_pred - ent_target)
+
+    # Composite bonus only when the rule perfectly matches the output.  Additional
+    # small boost for each unique functional operator used.
+    func_ops: List[str] = []
+    if isinstance(rule, CompositeRule):
+        func_ops = [
+            step.transformation.params.get("op")
+            for step in rule.steps
+            if step.transformation.ttype is TransformationType.FUNCTIONAL
+            and step.transformation.params.get("op")
+        ]
+    if isinstance(rule, CompositeRule) and base >= 0.95:
+        bonus = 0.2 + 0.02 * len(set(func_ops))
+        bonus = min(bonus, 0.3)
+    else:
+        bonus = 0.0
 
     final = base - penalty + bonus
 
@@ -199,6 +284,7 @@ def score_rule(
         "penalty": float(penalty),
         "bonus": float(bonus),
         "final_score": float(final),
+        "functional_ops": func_ops,
         "rule_steps": [
             step.transformation.ttype.value for step in rule.steps
         ]
@@ -210,6 +296,10 @@ def score_rule(
         trace["zone_entropy_penalty"] = float(z_pen)
         trace["zone_alignment_bonus"] = float(z_bonus)
         trace["zone_coverage_weight"] = float(z_weight)
+
+    if func_ops:
+        note = f"[score] {'/'.join(func_ops)} penalty={penalty:.3f}"
+        trace.setdefault("notes", []).append(note)
 
     if final < SCORE_FAILURE_THRESHOLD:
         log_failure(
@@ -240,4 +330,4 @@ def score_rule(
     return final
 
 
-__all__ = ["score_rule", "preferred_rule_types", "STRATEGY_REGISTRY"]
+__all__ = ["score_rule", "preferred_rule_types", "STRATEGY_REGISTRY", "op_penalty"]

@@ -7,7 +7,7 @@ from arc_solver.src.symbolic.vocabulary import (
     TransformationType,
     TransformationNature,
 )
-from arc_solver.src.executor.scoring import score_rule, preferred_rule_types
+from arc_solver.src.executor.scoring import score_rule, preferred_rule_types, _op_cost
 from arc_solver.src.scoring.entropy_utils import grid_color_entropy
 import pytest
 
@@ -101,6 +101,15 @@ def test_functional_weight_penalty():
         source=[Symbol(SymbolType.REGION, "All")],
         target=[Symbol(SymbolType.REGION, "All")],
     )
-    from arc_solver.src.executor.scoring import _op_cost
-
     assert _op_cost(rule) == pytest.approx(1.4, rel=1e-6)
+
+
+def test_specific_functional_weights():
+    rule = SymbolicRule(
+        transformation=Transformation(
+            TransformationType.FUNCTIONAL, params={"op": "mirror_tile"}
+        ),
+        source=[Symbol(SymbolType.REGION, "All")],
+        target=[Symbol(SymbolType.REGION, "All")],
+    )
+    assert _op_cost(rule) == pytest.approx(4.0, rel=1e-6)
