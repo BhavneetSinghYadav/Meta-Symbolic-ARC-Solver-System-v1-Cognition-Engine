@@ -164,13 +164,37 @@
 
 **Parameters:** zone_id
 
+**DSL Version:** v1
+
 **Description:** Dilate the pixels of ``zone_id`` by one cell inside ``zone_overlay``.
 
 **Example:**
 
 ```python
-# Example coming soon
+dilate_zone(zone_id=1) [ZONE=1] -> [ZONE=1] [SPATIAL]
 ```
+
+**Implementation:** `arc_solver/src/symbolic/vocabulary.py`
+
+## draw_line
+
+**DSL Keyword:** `draw_line`
+
+**Transformation Type:** `FUNCTIONAL`
+
+**Parameters:** p1, p2, color
+
+**DSL Version:** v1
+
+**Description:** Draw a 4-connected line on ``grid`` between ``point1`` and ``point2``.
+
+**Example:**
+
+```python
+draw_line(p1=(0, 0), p2=(1, 1), color=1) [REGION=All] -> [REGION=All] [SPATIAL]
+```
+
+**Implementation:** `arc_solver/src/symbolic/vocabulary.py`
 
 ## erode_zone
 
@@ -180,13 +204,17 @@
 
 **Parameters:** zone_id
 
+**DSL Version:** v1
+
 **Description:** Erode ``zone_id`` by removing boundary pixels within ``zone_overlay``.
 
 **Example:**
 
 ```python
-# Example coming soon
+erode_zone(zone_id=1) [ZONE=1] -> [ZONE=1] [SPATIAL]
 ```
+
+**Implementation:** `arc_solver/src/symbolic/vocabulary.py`
 
 ## mirror_tile
 
@@ -196,13 +224,17 @@
 
 **Parameters:** axis, repeats
 
+**DSL Version:** v1
+
 **Description:** Return grid tiled ``count`` times while mirroring every other tile.
 
 **Example:**
 
 ```python
-# Example coming soon
+mirror_tile(axis=horizontal, repeats=2) [REGION=All] -> [REGION=All] [SPATIAL]
 ```
+
+**Implementation:** `arc_solver/src/symbolic/vocabulary.py`
 
 ## pattern_fill
 
@@ -212,13 +244,17 @@
 
 **Parameters:** mapping
 
+**DSL Version:** v1
+
 **Description:** Return ``grid`` with a pattern copied from ``source_zone_id`` to ``target_zone_id``.
 
 **Example:**
 
 ```python
-# Example coming soon
+pattern_fill [REGION=All] -> [REGION=All] [SPATIAL]
 ```
+
+**Implementation:** `arc_solver/src/symbolic/vocabulary.py`
 
 ## rotate_about_point
 
@@ -228,13 +264,17 @@
 
 **Parameters:** pivot, angle
 
+**DSL Version:** v1
+
 **Description:** Return ``grid`` rotated ``angle`` degrees about ``center``.
 
 **Example:**
 
 ```python
-# Example coming soon
+rotate_about_point(pivot=(1,1), angle=90) [REGION=All] -> [REGION=All] [SPATIAL]
 ```
+
+**Implementation:** `arc_solver/src/symbolic/vocabulary.py`
 
 ## zone_remap
 
@@ -244,10 +284,14 @@
 
 **Parameters:** mapping
 
+**DSL Version:** v1
+
 **Description:** Return a new grid with zones recoloured via ``zone_to_color``.
 
 **Example:**
 
 ```python
-# Example coming soon
+zone_remap(mapping={1: 2}) [REGION=All] -> [REGION=All] [SPATIAL]
 ```
+
+**Implementation:** `arc_solver/src/symbolic/vocabulary.py`
