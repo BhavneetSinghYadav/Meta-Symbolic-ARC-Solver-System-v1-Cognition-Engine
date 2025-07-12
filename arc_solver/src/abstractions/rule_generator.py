@@ -169,6 +169,75 @@ def rule_cost(rule: SymbolicRule | CompositeRule) -> float:
     return op_weight + 0.5 * zone_size + 0.1 * transform_complexity
 
 
+def fallback_composite_rules(
+    rules: List[SymbolicRule],
+    input_grid: Grid,
+    output_grid: Grid,
+    *,
+    score_threshold: float = 0.6,
+) -> List[CompositeRule]:
+    """Return composite chains when all ``rules`` score below ``score_threshold``."""
+
+    from itertools import product
+    from pathlib import Path
+    import json
+    from arc_solver.src.executor.scoring import score_rule, rule_cost
+    from arc_solver.src.executor.simulator import simulate_composite_safe
+
+    if not rules:
+        return []
+
+    base_scores = [score_rule(input_grid, output_grid, r) for r in rules]
+    if base_scores and max(base_scores) >= score_threshold:
+        return []
+
+    candidates: List[tuple[CompositeRule, float]] = []
+    for length in range(2, min(4, len(rules)) + 1):
+        for steps in product(rules, repeat=length):
+            comp = CompositeRule(list(steps))
+            try:
+                simulate_composite_safe(input_grid, comp)
+            except Exception:
+                continue
+            score = score_rule(input_grid, output_grid, comp)
+            if score <= 0:
+                continue
+            candidates.append((comp, score))
+
+    seen = set()
+    deduped: List[CompositeRule] = []
+    for comp, score in candidates:
+        signature = tuple(
+            getattr(s, "dsl_str", rule_to_dsl(s)) for s in comp.steps
+        ) + tuple(s.meta.get("functional") for s in comp.steps)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        comp.meta["score"] = score
+        deduped.append(comp)
+
+    deduped.sort(
+        key=lambda c: score_rule(input_grid, output_grid, c) - 0.05 * rule_cost(c),
+        reverse=True,
+    )
+
+    try:
+        path = Path("logs/fallback_trace.jsonl")
+        path.parent.mkdir(exist_ok=True)
+        best = deduped[0] if deduped else None
+        entry = {
+            "trigger_reason": "base_scores_below_threshold",
+            "candidate_count": len(deduped),
+            "best_summary": rule_to_dsl(best.as_symbolic_proxy()) if best else None,
+            "best_score": score_rule(input_grid, output_grid, best) if best else None,
+        }
+        path.open("a", encoding="utf-8").write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+
+    return deduped
+
+
 def generate_all_rules(
     grid_in: Grid,
     grid_out: Grid,
@@ -206,6 +275,7 @@ __all__ = [
     "normalize_rule_dsl",
     "remove_duplicate_rules",
     "rule_cost",
+    "fallback_composite_rules",
     "generate_all_rules",
     "OPERATOR_GENERATORS",
 ]

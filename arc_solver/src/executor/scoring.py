@@ -162,6 +162,16 @@ def _op_cost(rule: SymbolicRule | CompositeRule) -> float:
     return float(cost)
 
 
+def rule_cost(rule: SymbolicRule | CompositeRule) -> float:
+    """Return weighted complexity cost for ``rule``."""
+
+    if isinstance(rule, CompositeRule):
+        cost = sum(_op_cost(step) for step in rule.steps)
+        cost += 0.5 * len(rule.steps)
+        return float(cost)
+    return float(_op_cost(rule))
+
+
 def _extract_zones(rule: SymbolicRule | CompositeRule) -> List[str]:
     """Return sorted unique zones referenced by ``rule``."""
 
@@ -330,4 +340,10 @@ def score_rule(
     return final
 
 
-__all__ = ["score_rule", "preferred_rule_types", "STRATEGY_REGISTRY", "op_penalty"]
+__all__ = [
+    "score_rule",
+    "preferred_rule_types",
+    "STRATEGY_REGISTRY",
+    "op_penalty",
+    "rule_cost",
+]
