@@ -66,6 +66,7 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
 
     zone_chain: List[Tuple[str | None, str | None]] = []
     zone_scopes: List[Tuple[List[str], List[str]]] = []
+    pivot_chain: List[str | None] = []
 
     def _to_list(val: Any) -> List[str]:
         if not val:
@@ -92,6 +93,11 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
                     zones = [str(k) for k in mapping.keys()]
                     meta.setdefault("input_zones", zones)
                     meta.setdefault("output_zones", zones)
+        elif step.transformation.ttype is TransformationType.ROTATE:
+            cx = step.transformation.params.get("cx")
+            cy = step.transformation.params.get("cy")
+            if cx is not None and cy is not None:
+                meta.setdefault("pivot", f"{cx},{cy}")
 
         in_list = _to_list(meta.get("input_zones"))
         out_list = _to_list(meta.get("output_zones"))
@@ -107,6 +113,7 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
 
         zone_chain.append((_first(in_list), _first(out_list)))
         zone_scopes.append((in_list, out_list))
+        pivot_chain.append(meta.get("pivot"))
 
     merged_zones = sorted({z for ins, outs in zone_scopes for z in ins + outs if z})
     if len(merged_zones) == 1:
@@ -117,6 +124,10 @@ def as_symbolic_proxy(rule: CompositeRule) -> SymbolicRule:
     proxy.meta["step_count"] = len(rule.steps)
     proxy.meta["zone_chain"] = zone_chain
     proxy.meta["zone_scope_chain"] = zone_scopes
+    proxy.meta["pivot_chain"] = pivot_chain
+    unique_pivots = {p for p in pivot_chain if p}
+    if len(unique_pivots) == 1:
+        proxy.meta["pivot"] = next(iter(unique_pivots))
     return proxy
 
 
